@@ -6,6 +6,7 @@ import { WeaponSystem } from './weapons'
 import { Effects } from './effects'
 import { Horde, WaveSystem } from './waves'
 import { Economy, POINTS } from './economy'
+import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
 
 type Mode = 'menu' | 'playing' | 'dead'
@@ -23,6 +24,7 @@ export class Game {
   private horde: Horde
   private waves: WaveSystem
   private economy = new Economy()
+  private groanTimer = 2
   private clock = new THREE.Clock()
   private mode: Mode = 'menu'
 
@@ -45,8 +47,13 @@ export class Game {
       onWaveStart: (w) => {
         this.hud.setWave(w)
         this.hud.banner(`WAVE ${w}`)
+        audio.waveStinger()
+        audio.setIntensity(Math.min(0.15 + w * 0.08, 1))
       },
-      onIntermission: (next) => this.hud.banner(`WAVE ${next} INCOMING…`, 3200),
+      onIntermission: (next) => {
+        this.hud.banner(`WAVE ${next} INCOMING…`, 3200)
+        audio.setIntensity(0.12)
+      },
     })
 
     window.addEventListener('resize', () => this.resize())
@@ -61,12 +68,33 @@ export class Game {
     this.hud.setPoints(this.economy.points)
     this.input.requestLock()
     this.waves.begin()
+    audio.unlock()
+    audio.startMusic()
+    audio.setIntensity(0.1)
   }
 
   private earn(amount: number) {
     this.economy.earn(amount)
     this.hud.setPoints(this.economy.points)
     this.hud.pointsDelta(amount)
+  }
+
+  private updateGroans(dt: number) {
+    this.groanTimer -= dt
+    if (this.groanTimer > 0) return
+    const alive = this.horde.zombies.filter((z) => z.alive)
+    if (alive.length === 0) {
+      this.groanTimer = 2
+      return
+    }
+    this.groanTimer = 1.1 + Math.random() * 2.4 - Math.min(alive.length * 0.05, 0.8)
+    const z = alive[Math.floor(Math.random() * alive.length)]
+    const dx = z.group.position.x - this.player.pos.x
+    const dz = z.group.position.z - this.player.pos.z
+    const dist = Math.hypot(dx, dz)
+    // pan by direction relative to where the player is facing
+    const angle = Math.atan2(dx, dz) - this.player.yaw
+    audio.groan(-Math.sin(angle), Math.max(0, 1 - dist / 30), z.runner)
   }
 
   private handleShopping() {
@@ -86,8 +114,10 @@ export class Game {
         this.hud.pointsDelta(-price)
         if (owned) this.weapon.refill(station.def.id)
         else this.weapon.give(station.def)
+        audio.purchase()
       } else {
         this.hud.banner('NOT ENOUGH POINTS', 1200)
+        audio.deny()
       }
     }
   }
@@ -112,6 +142,9 @@ export class Game {
 
       const targets = [...this.arena.colliderMeshes, ...this.horde.targets()]
       const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
+      if (this.weapon.events.fired) audio.gunshot(this.weapon.def.id)
+      if (this.weapon.events.dryFired) audio.dryFire()
+      if (this.weapon.events.reloadStarted) audio.reload()
       for (const hit of hits) {
         if (!hit.object) continue
         const zombie = this.horde.zombieFor(hit.object)
@@ -120,6 +153,7 @@ export class Game {
         const headshot = zombie.isHeadPart(hit.object)
         const dmg = this.weapon.def.damage * (headshot ? this.weapon.def.headshotMult : 1)
         this.earn(POINTS.hit)
+        audio.zombieHit()
         if (zombie.damage(dmg)) {
           this.waves.registerKill(zombie, headshot)
           this.earn(headshot ? POINTS.headshotKill : POINTS.kill)
@@ -133,8 +167,12 @@ export class Game {
       this.economy.update(dt)
 
       const zombieDamage = this.horde.update(dt, this.player.pos, this.arena.colliders)
-      if (zombieDamage > 0) this.player.takeDamage(zombieDamage)
+      if (zombieDamage > 0) {
+        this.player.takeDamage(zombieDamage)
+        audio.playerHurt()
+      }
       this.waves.update(dt)
+      this.updateGroans(dt)
 
       this.hud.setAmmo(this.weapon.mag, this.weapon.reserve, this.weapon.reloading)
       this.hud.setWeaponName(this.weapon.def.name)
@@ -142,6 +180,7 @@ export class Game {
 
       if (!this.player.alive) {
         this.mode = 'dead'
+        audio.deathSting()
         document.exitPointerLock?.()
         this.hud.showGameOver(
           this.waves.wave,

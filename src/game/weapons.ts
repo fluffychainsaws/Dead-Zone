@@ -91,10 +91,17 @@ export class WeaponInstance {
   }
 }
 
+export interface WeaponEvents {
+  fired: boolean
+  dryFired: boolean
+  reloadStarted: boolean
+}
+
 export class WeaponSystem {
   slots: WeaponInstance[] = []
   activeIdx = 0
   reloading = false
+  events: WeaponEvents = { fired: false, dryFired: false, reloadStarted: false }
 
   private cooldown = 0
   private reloadT = 0
@@ -181,6 +188,7 @@ export class WeaponSystem {
     targets: THREE.Object3D[],
     effects: Effects,
   ): ShotHit[] {
+    this.events = { fired: false, dryFired: false, reloadStarted: false }
     if (input.consumeSwitch()) this.switchNext()
 
     const w = this.active
@@ -213,11 +221,13 @@ export class WeaponSystem {
     }
     if (w.mag <= 0) {
       if (w.reserve > 0) this.startReload()
+      else this.events.dryFired = true
       this.applyViewmodelMotion()
       return []
     }
 
     // fire!
+    this.events.fired = true
     w.mag--
     this.cooldown = 60 / w.def.rpm
     this.kick = 1
@@ -258,6 +268,7 @@ export class WeaponSystem {
   private startReload() {
     this.reloading = true
     this.reloadT = this.active.def.reloadTime
+    this.events.reloadStarted = true
   }
 
   private applyViewmodelMotion() {

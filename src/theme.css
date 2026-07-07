@@ -387,6 +387,34 @@ body {
   white-space: nowrap;
 }
 
+/* ---------------- audio toggles ---------------- */
+
+#audio-toggles {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 12px);
+  right: calc(env(safe-area-inset-right) + 12px);
+  display: flex;
+  gap: 8px;
+  z-index: 20;
+}
+
+#audio-toggles button {
+  width: 42px;
+  height: 42px;
+  font-size: 1.15rem;
+  border-radius: 50%;
+  border: 1px solid rgba(132, 255, 90, 0.5);
+  background: rgba(14, 22, 10, 0.65);
+  color: var(--bone);
+  cursor: pointer;
+}
+
+#audio-toggles button.off {
+  border-color: rgba(120, 130, 115, 0.4);
+  color: #4a5546;
+  text-decoration: line-through;
+}
+
 /* ---------------- touch controls ---------------- */
 
 #touch-controls {
