@@ -79,3 +79,191 @@ body {
   8%, 44% { opacity: 0.55; }
   8.5% { opacity: 0.8; }
 }
+
+#title-screen.hidden {
+  display: none;
+}
+
+#play-btn {
+  pointer-events: auto;
+  margin-top: 1.5rem;
+  padding: 0.9rem 2.6rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 4vw, 1.6rem);
+  letter-spacing: 0.18em;
+  color: var(--bone);
+  background: rgba(10, 20, 8, 0.7);
+  border: 2px solid var(--bone);
+  border-radius: 4px;
+  cursor: pointer;
+  text-shadow: 0 0 10px rgba(132, 255, 90, 0.5);
+  box-shadow: 0 0 18px rgba(132, 255, 90, 0.25), inset 0 0 12px rgba(132, 255, 90, 0.08);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+#play-btn:hover,
+#play-btn:active {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(132, 255, 90, 0.5), inset 0 0 18px rgba(132, 255, 90, 0.15);
+}
+
+/* ---------------- HUD ---------------- */
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+  padding: calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 14px)
+    calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 14px);
+}
+
+#hud.visible {
+  display: block;
+}
+
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(132, 255, 90, 0.9);
+  box-shadow:
+    0 -10px 0 -1px rgba(132, 255, 90, 0.7),
+    0 10px 0 -1px rgba(132, 255, 90, 0.7),
+    -10px 0 0 -1px rgba(132, 255, 90, 0.7),
+    10px 0 0 -1px rgba(132, 255, 90, 0.7);
+}
+
+#ammo {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 18px);
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  text-shadow: 0 0 8px rgba(132, 255, 90, 0.45);
+}
+
+#ammo.low {
+  color: var(--blood-bright);
+  text-shadow: 0 0 8px rgba(224, 32, 32, 0.6);
+}
+
+#hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* ---------------- touch controls ---------------- */
+
+#touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+#joy-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  touch-action: none;
+}
+
+#look-zone {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 58%;
+  touch-action: none;
+}
+
+#joy-base {
+  position: absolute;
+  left: 20%;
+  top: 70%;
+  width: 110px;
+  height: 110px;
+  margin: -55px 0 0 -55px;
+  border: 2px solid rgba(132, 255, 90, 0.35);
+  border-radius: 50%;
+  background: rgba(20, 30, 15, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#joy-base.active {
+  border-color: rgba(132, 255, 90, 0.7);
+}
+
+#joy-knob {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(132, 255, 90, 0.45);
+  box-shadow: 0 0 12px rgba(132, 255, 90, 0.4);
+}
+
+#touch-controls button {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(132, 255, 90, 0.5);
+  background: rgba(20, 30, 15, 0.45);
+  color: var(--bone);
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  touch-action: none;
+  z-index: 6;
+}
+
+#btn-fire {
+  right: calc(env(safe-area-inset-right) + 26px);
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  width: 92px;
+  height: 92px;
+  font-size: 1.15rem;
+  border-color: rgba(224, 32, 32, 0.65);
+  color: var(--blood-bright);
+  background: rgba(40, 8, 8, 0.45);
+}
+
+#btn-fire:active {
+  background: rgba(120, 16, 16, 0.55);
+}
+
+#btn-reload {
+  right: calc(env(safe-area-inset-right) + 132px);
+  bottom: calc(env(safe-area-inset-bottom) + 48px);
+  width: 56px;
+  height: 56px;
+  font-size: 1rem;
+}
+
+#btn-interact {
+  right: calc(env(safe-area-inset-right) + 140px);
+  bottom: calc(env(safe-area-inset-bottom) + 118px);
+  width: 56px;
+  height: 56px;
+  font-size: 0.85rem;
+  display: none;
+}
+
+#btn-interact.visible {
+  display: block;
+}
