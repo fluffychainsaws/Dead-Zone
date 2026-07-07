@@ -25,10 +25,19 @@
           <button id="play-btn">SOLO</button>
           <button id="host-btn">HOST GAME</button>
           <button id="join-btn">JOIN GAME</button>
+          <button id="lobby-btn">LOBBY</button>
         </div>
         <div id="join-row">
           <input id="join-code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" />
           <button id="join-go">GO</button>
+        </div>
+        <div id="lobby-panel">
+          <div id="lobby-head">
+            <span>LIVE GAMES</span>
+            <span id="lobby-online"></span>
+            <button id="lobby-close">✕</button>
+          </div>
+          <div id="lobby-list"><p class="lobby-empty">Scanning the dead zone…</p></div>
         </div>
       </div>
     </div>

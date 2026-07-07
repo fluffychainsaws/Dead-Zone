@@ -2,6 +2,7 @@ import './theme.css'
 import { registerSW } from 'virtual:pwa-register'
 import { Game } from './game/Game'
 import { makeGameCode } from './net/room'
+import { Lobby } from './net/lobby'
 import { audio } from './audio/audio'
 
 registerSW({ immediate: true })
@@ -38,9 +39,72 @@ document.getElementById('join-go')!.addEventListener('click', () => {
     .trim()
     .toUpperCase()
   if (code.length < 4) return
+  leaveMenuLobby()
   hideTitle()
   game.startClient(code)
 })
+
+// ---------------- global lobby browser ----------------
+
+let menuLobby: Lobby | null = null
+let lobbyRenderTimer: ReturnType<typeof setInterval> | null = null
+const lobbyPanel = document.getElementById('lobby-panel')!
+const lobbyList = document.getElementById('lobby-list')!
+const lobbyOnline = document.getElementById('lobby-online')!
+
+function leaveMenuLobby() {
+  menuLobby?.leave()
+  menuLobby = null
+  if (lobbyRenderTimer) clearInterval(lobbyRenderTimer)
+  lobbyRenderTimer = null
+  lobbyPanel.classList.remove('open')
+}
+
+function renderLobby() {
+  if (!menuLobby) return
+  const online = menuLobby.playersOnline()
+  lobbyOnline.textContent = `${online} SURVIVOR${online === 1 ? '' : 'S'} ONLINE`
+  const games = menuLobby.list()
+  if (games.length === 0) {
+    lobbyList.innerHTML =
+      '<p class="lobby-empty">No live games found. Host one and the world will see it.</p>'
+    return
+  }
+  lobbyList.innerHTML = ''
+  for (const ad of games) {
+    const row = document.createElement('div')
+    row.className = 'lobby-row'
+    row.innerHTML = `
+      <span class="lobby-host">${ad.host}</span>
+      <span class="lobby-meta">WAVE ${Math.max(ad.wave, 1)} · ${ad.players} ALIVE</span>
+      <button class="lobby-join">JOIN</button>
+    `
+    row.querySelector('.lobby-join')!.addEventListener('click', () => {
+      leaveMenuLobby()
+      hideTitle()
+      game.startClient(ad.code)
+    })
+    lobbyList.appendChild(row)
+  }
+}
+
+document.getElementById('lobby-btn')!.addEventListener('click', () => {
+  audio.unlock()
+  if (lobbyPanel.classList.contains('open')) {
+    leaveMenuLobby()
+    return
+  }
+  lobbyPanel.classList.add('open')
+  lobbyList.innerHTML = '<p class="lobby-empty">Scanning the dead zone…</p>'
+  menuLobby = new Lobby()
+  menuLobby.onUpdate = renderLobby
+  lobbyRenderTimer = setInterval(renderLobby, 1000)
+})
+
+document.getElementById('lobby-close')!.addEventListener('click', leaveMenuLobby)
+
+document.getElementById('play-btn')!.addEventListener('click', leaveMenuLobby)
+document.getElementById('host-btn')!.addEventListener('click', leaveMenuLobby)
 
 // audio toggles — present on title screen and in-game
 const toggles = document.createElement('div')

@@ -8,6 +8,7 @@ import { Horde, WaveSystem } from './waves'
 import { Economy, POINTS } from './economy'
 import { RemotePlayer, RemoteZombieField } from './remote'
 import { NetRoom, selfId, type GameState, type PlayerState } from '../net/room'
+import { Lobby, shortName } from '../net/lobby'
 import type { TargetInfo } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
@@ -44,6 +45,7 @@ export class Game {
   private netTimer = 0
   private hostId: string | null = null
   private clientWave = 0
+  private lobby: Lobby | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -116,6 +118,14 @@ export class Game {
     this.hud.setRoomInfo(`CODE: ${code}`)
     this.beginPlaying()
     this.waves.begin()
+    // announce this game to the global lobby while it's joinable
+    this.lobby = new Lobby()
+    this.lobby.startAnnouncing(() => ({
+      code,
+      host: shortName(),
+      wave: this.waves.wave,
+      players: (this.net?.peers().length ?? 0) + 1,
+    }))
   }
 
   startClient(code: string) {
@@ -325,6 +335,8 @@ export class Game {
   private gameOver() {
     if (this.mode === 'dead') return
     this.mode = 'dead'
+    this.lobby?.leave()
+    this.lobby = null
     audio.deathSting()
     document.exitPointerLock?.()
     this.hud.showGameOver(
