@@ -6,7 +6,12 @@ export class Hud {
   private bannerEl: HTMLElement
   private vignetteEl: HTMLElement
   private gameOverEl: HTMLElement
+  private pointsEl: HTMLElement
+  private promptEl: HTMLElement
+  private hitmarkerEl: HTMLElement
+  private weaponEl: HTMLElement
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
+  private hitTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(isTouch: boolean) {
     this.root = document.createElement('div')
@@ -17,6 +22,10 @@ export class Hud {
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
       <div id="wave-banner"></div>
       <div id="health-bar"><div id="health-fill"></div></div>
+      <div id="points">500</div>
+      <div id="prompt"></div>
+      <div id="hitmarker"></div>
+      <div id="weapon-name"></div>
       <div id="ammo">--</div>
       <div id="hint">${
         isTouch
@@ -36,6 +45,39 @@ export class Hud {
     this.bannerEl = this.root.querySelector('#wave-banner')!
     this.vignetteEl = this.root.querySelector('#vignette')!
     this.gameOverEl = this.root.querySelector('#game-over')!
+    this.pointsEl = this.root.querySelector('#points')!
+    this.promptEl = this.root.querySelector('#prompt')!
+    this.hitmarkerEl = this.root.querySelector('#hitmarker')!
+    this.weaponEl = this.root.querySelector('#weapon-name')!
+  }
+
+  setPoints(points: number) {
+    this.pointsEl.textContent = String(points)
+  }
+
+  pointsDelta(amount: number) {
+    const el = document.createElement('span')
+    el.className = 'points-delta'
+    el.textContent = amount > 0 ? `+${amount}` : String(amount)
+    if (amount < 0) el.classList.add('spend')
+    this.pointsEl.appendChild(el)
+    setTimeout(() => el.remove(), 900)
+  }
+
+  setWeaponName(name: string) {
+    this.weaponEl.textContent = name
+  }
+
+  setPrompt(text: string | null) {
+    this.promptEl.textContent = text ?? ''
+    this.promptEl.classList.toggle('show', !!text)
+    document.getElementById('btn-interact')?.classList.toggle('visible', !!text)
+  }
+
+  hitmarker(kind: 'hit' | 'kill' | 'headshot') {
+    this.hitmarkerEl.className = `show ${kind}`
+    if (this.hitTimer) clearTimeout(this.hitTimer)
+    this.hitTimer = setTimeout(() => (this.hitmarkerEl.className = ''), 110)
   }
 
   setAmmo(mag: number, reserve: number, reloading: boolean) {
@@ -63,9 +105,9 @@ export class Hud {
     this.bannerTimer = setTimeout(() => this.bannerEl.classList.remove('show'), ms)
   }
 
-  showGameOver(wave: number, kills: number, onRestart: () => void) {
+  showGameOver(wave: number, kills: number, points: number, onRestart: () => void) {
     this.root.querySelector('#go-stats')!.textContent =
-      `You fell on wave ${wave} · ${kills} zombies destroyed`
+      `You fell on wave ${wave} · ${kills} zombies destroyed · ${points} points earned`
     this.gameOverEl.classList.add('show')
     this.root
       .querySelector('#go-restart')!
