@@ -4,9 +4,10 @@ import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem, WEAPONS } from './weapons'
 import { Effects } from './effects'
+import { Horde, WaveSystem } from './waves'
 import { Hud } from '../ui/hud'
 
-type Mode = 'menu' | 'playing'
+type Mode = 'menu' | 'playing' | 'dead'
 
 export class Game {
   private renderer: THREE.WebGLRenderer
@@ -18,6 +19,8 @@ export class Game {
   private weapon: WeaponSystem
   private effects: Effects
   private hud: Hud
+  private horde: Horde
+  private waves: WaveSystem
   private clock = new THREE.Clock()
   private mode: Mode = 'menu'
 
@@ -35,6 +38,14 @@ export class Game {
     this.weapon = new WeaponSystem(WEAPONS.pistol, this.camera)
     this.weapon.viewmodel.visible = false
     this.hud = new Hud(this.input.isTouch)
+    this.horde = new Horde(this.scene)
+    this.waves = new WaveSystem(this.horde, this.arena.spawnPoints, {
+      onWaveStart: (w) => {
+        this.hud.setWave(w)
+        this.hud.banner(`WAVE ${w}`)
+      },
+      onIntermission: (next) => this.hud.banner(`WAVE ${next} INCOMING…`, 3200),
+    })
 
     window.addEventListener('resize', () => this.resize())
     this.resize()
@@ -46,6 +57,7 @@ export class Game {
     this.weapon.viewmodel.visible = true
     this.hud.show()
     this.input.requestLock()
+    this.waves.begin()
   }
 
   private resize() {
@@ -62,11 +74,37 @@ export class Game {
       const t = this.clock.getElapsedTime()
       this.camera.position.set(Math.sin(t * 0.07) * 16, 7, Math.cos(t * 0.07) * 16)
       this.camera.lookAt(0, 1, 0)
-    } else {
+    } else if (this.mode === 'playing') {
       this.player.update(dt, this.input, this.arena.colliders)
       this.player.applyCamera(this.camera)
-      this.weapon.update(dt, this.input, this.camera, this.arena.colliderMeshes, this.effects)
+
+      const targets = [...this.arena.colliderMeshes, ...this.horde.targets()]
+      const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
+      for (const hit of hits) {
+        if (!hit.object) continue
+        const zombie = this.horde.zombieFor(hit.object)
+        if (!zombie) continue
+        this.effects.impact(hit.point.clone(), 'blood')
+        const headshot = zombie.isHeadPart(hit.object)
+        const dmg = this.weapon.def.damage * (headshot ? this.weapon.def.headshotMult : 1)
+        if (zombie.damage(dmg)) this.waves.registerKill(zombie, headshot)
+      }
+
+      const zombieDamage = this.horde.update(dt, this.player.pos, this.arena.colliders)
+      if (zombieDamage > 0) this.player.takeDamage(zombieDamage)
+      this.waves.update(dt)
+
       this.hud.setAmmo(this.weapon.mag, this.weapon.reserve, this.weapon.reloading)
+      this.hud.setHealth(this.player.hp, this.player.maxHp, this.player.recentlyHit)
+
+      if (!this.player.alive) {
+        this.mode = 'dead'
+        document.exitPointerLock?.()
+        this.hud.showGameOver(this.waves.wave, this.waves.kills, () => location.reload())
+      }
+    } else {
+      // dead: keep rendering the world, horde keeps milling around
+      this.horde.update(dt, this.player.pos, this.arena.colliders)
     }
 
     this.effects.update(dt)

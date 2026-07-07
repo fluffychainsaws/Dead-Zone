@@ -1,13 +1,13 @@
 import * as THREE from 'three'
 
-function makeGlowTexture(): THREE.CanvasTexture {
+function makeGlowTexture(stops: [string, string, string]): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = c.height = 64
   const ctx = c.getContext('2d')!
   const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30)
-  g.addColorStop(0, 'rgba(255,240,180,1)')
-  g.addColorStop(0.4, 'rgba(255,180,60,0.7)')
-  g.addColorStop(1, 'rgba(255,120,20,0)')
+  g.addColorStop(0, stops[0])
+  g.addColorStop(0.4, stops[1])
+  g.addColorStop(1, stops[2])
   ctx.fillStyle = g
   ctx.fillRect(0, 0, 64, 64)
   return new THREE.CanvasTexture(c)
@@ -25,7 +25,16 @@ interface Tracer {
 
 export class Effects {
   private scene: THREE.Scene
-  private glowTex = makeGlowTexture()
+  private sparkTex = makeGlowTexture([
+    'rgba(255,240,180,1)',
+    'rgba(255,180,60,0.7)',
+    'rgba(255,120,20,0)',
+  ])
+  private bloodTex = makeGlowTexture([
+    'rgba(190,20,20,1)',
+    'rgba(130,10,10,0.75)',
+    'rgba(60,0,0,0)',
+  ])
   private sparks: Spark[] = []
   private tracers: Tracer[] = []
   muzzleLight: THREE.PointLight
@@ -41,16 +50,16 @@ export class Effects {
     this.muzzleLight.intensity = 26
   }
 
-  impact(point: THREE.Vector3) {
+  impact(point: THREE.Vector3, kind: 'spark' | 'blood' = 'spark') {
     const mat = new THREE.SpriteMaterial({
-      map: this.glowTex,
-      blending: THREE.AdditiveBlending,
+      map: kind === 'blood' ? this.bloodTex : this.sparkTex,
+      blending: kind === 'blood' ? THREE.NormalBlending : THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
     })
     const sprite = new THREE.Sprite(mat)
     sprite.position.copy(point)
-    sprite.scale.setScalar(0.35)
+    sprite.scale.setScalar(kind === 'blood' ? 0.55 : 0.35)
     this.scene.add(sprite)
     this.sparks.push({ sprite, life: 0.12 })
   }

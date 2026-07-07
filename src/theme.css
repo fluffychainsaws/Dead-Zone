@@ -138,6 +138,119 @@ body {
     10px 0 0 -1px rgba(132, 255, 90, 0.7);
 }
 
+#vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 42%,
+    rgba(120, 0, 0, 0.55) 78%,
+    rgba(90, 0, 0, 0.85) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+#wave-label {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 18px);
+  top: calc(env(safe-area-inset-top) + 14px);
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.14em;
+  color: var(--blood-bright);
+  text-shadow: 0 0 8px rgba(224, 32, 32, 0.5);
+}
+
+#wave-banner {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translateX(-50%) scale(0.9);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 8vw, 4.5rem);
+  letter-spacing: 0.16em;
+  color: var(--blood-bright);
+  text-shadow: 0 0 14px rgba(224, 32, 32, 0.6), 0 0 60px rgba(165, 18, 18, 0.4);
+  opacity: 0;
+  transition: opacity 0.5s, transform 0.5s;
+  white-space: nowrap;
+}
+
+#wave-banner.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+#health-bar {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 18px);
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+  width: min(240px, 34vw);
+  height: 14px;
+  border: 1px solid rgba(132, 255, 90, 0.5);
+  background: rgba(10, 16, 8, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#health-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #3f8a2a, #84ff5a);
+  transition: width 0.2s;
+}
+
+#health-fill.critical {
+  background: linear-gradient(90deg, #7a1010, #e02020);
+}
+
+#game-over {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: rgba(8, 2, 2, 0.82);
+  pointer-events: auto;
+}
+
+#game-over.show {
+  display: flex;
+}
+
+#game-over h2 {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 12vw, 6.5rem);
+  letter-spacing: 0.12em;
+  color: var(--blood-bright);
+  text-shadow: 0 0 18px rgba(224, 32, 32, 0.7);
+}
+
+#go-stats {
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+#go-restart {
+  margin-top: 0.6rem;
+  padding: 0.8rem 2.4rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.16em;
+  color: var(--bone);
+  background: rgba(10, 20, 8, 0.7);
+  border: 2px solid var(--bone);
+  border-radius: 4px;
+  cursor: pointer;
+  text-shadow: 0 0 10px rgba(132, 255, 90, 0.5);
+}
+
 #ammo {
   position: absolute;
   right: calc(env(safe-area-inset-right) + 18px);

@@ -16,9 +16,31 @@ export class Player {
   alive = true
 
   private bobT = 0
+  private time = 0
+  private lastHitAt = -10
+  private static readonly REGEN_DELAY = 4
+  private static readonly REGEN_RATE = 20
+
+  takeDamage(amount: number) {
+    if (!this.alive || amount <= 0) return
+    this.hp -= amount
+    this.lastHitAt = this.time
+    if (this.hp <= 0) {
+      this.hp = 0
+      this.alive = false
+    }
+  }
+
+  get recentlyHit(): boolean {
+    return this.time - this.lastHitAt < 0.35
+  }
 
   update(dt: number, input: Input, colliders: Collider[]) {
     if (!this.alive) return
+    this.time += dt
+    if (this.time - this.lastHitAt > Player.REGEN_DELAY && this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + Player.REGEN_RATE * dt)
+    }
     const look = input.consumeLook()
     this.yaw -= look.x
     this.pitch = THREE.MathUtils.clamp(this.pitch - look.y, -1.45, 1.45)
