@@ -9,6 +9,16 @@ const ATTACK_DAMAGE = 14
 
 export type ZombieState = 'chasing' | 'attacking' | 'dying'
 
+export interface TargetInfo {
+  id: string
+  pos: THREE.Vector3
+}
+
+export interface AttackResult {
+  targetId: string
+  damage: number
+}
+
 interface Parts {
   head: THREE.Mesh
   armL: THREE.Mesh
@@ -66,13 +76,13 @@ export class Zombie {
     return false
   }
 
-  /** Returns damage dealt to the player this frame (usually 0). */
+  /** Chases the nearest target; returns an attack that landed this frame, if any. */
   update(
     dt: number,
-    playerPos: THREE.Vector3,
+    targets: TargetInfo[],
     colliders: Collider[],
     others: Zombie[],
-  ): number {
+  ): AttackResult | null {
     if (this.state === 'dying') {
       this.deathT += dt
       // fall over, then sink
@@ -82,14 +92,25 @@ export class Zombie {
         this.scene.remove(this.group)
         this.dead = true
       }
-      return 0
+      return null
     }
 
     this.animT += dt * (this.runner ? 2.4 : 1.0)
     const pos = this.group.position
-    const dx = playerPos.x - pos.x
-    const dz = playerPos.z - pos.z
-    const dist = Math.hypot(dx, dz)
+
+    // nearest target
+    let target: TargetInfo | null = null
+    let dist = Infinity
+    for (const t of targets) {
+      const d = Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z)
+      if (d < dist) {
+        dist = d
+        target = t
+      }
+    }
+    if (!target) return null
+    const dx = target.pos.x - pos.x
+    const dz = target.pos.z - pos.z
     this.group.rotation.y = Math.atan2(dx, dz)
 
     let dealt = 0
@@ -135,7 +156,7 @@ export class Zombie {
       this.parts.armR.rotation.x = -Math.PI / 2 + Math.cos(this.animT * 2.0) * 0.15
       this.parts.head.rotation.z = Math.sin(this.animT * 1.7) * 0.12
     }
-    return dealt
+    return dealt > 0 ? { targetId: target.id, damage: dealt } : null
   }
 
   isHeadPart(obj: THREE.Object3D): boolean {
@@ -161,6 +182,11 @@ export class Zombie {
       }
     }
   }
+}
+
+/** Exported for client-side rendering of host-simulated zombies. */
+export function buildZombieMeshExternal(runner: boolean): { group: THREE.Group; parts: Parts } {
+  return buildZombieMesh(runner)
 }
 
 function buildZombieMesh(runner: boolean): { group: THREE.Group; parts: Parts } {

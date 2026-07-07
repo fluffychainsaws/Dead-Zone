@@ -20,6 +20,7 @@ export class Hud {
       <div id="vignette"></div>
       <div id="crosshair"></div>
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
+      <div id="room-info"></div>
       <div id="wave-banner"></div>
       <div id="health-bar"><div id="health-fill"></div></div>
       <div id="points">500</div>
@@ -96,6 +97,12 @@ export class Hud {
 
   setWave(wave: number) {
     this.waveEl.textContent = wave > 0 ? String(wave) : '–'
+  }
+
+  setRoomInfo(text: string | null) {
+    const el = this.root.querySelector<HTMLElement>('#room-info')!
+    el.textContent = text ?? ''
+    el.style.display = text ? 'block' : 'none'
   }
 
   banner(text: string, ms = 2600) {

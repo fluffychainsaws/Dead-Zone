@@ -135,6 +135,10 @@ export class WeaponSystem {
     return this.slots.some((s) => s.def.id === defId)
   }
 
+  allDefs(): Record<string, WeaponDef> {
+    return WEAPONS
+  }
+
   /** Add a weapon: fills a free slot or replaces the active one. */
   give(def: WeaponDef) {
     this.cancelReload()

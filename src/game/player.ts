@@ -14,6 +14,7 @@ export class Player {
   hp = 100
   maxHp = 100
   alive = true
+  downed = false
 
   private bobT = 0
   private time = 0
@@ -21,14 +22,16 @@ export class Player {
   private static readonly REGEN_DELAY = 4
   private static readonly REGEN_RATE = 20
 
+  /** Floors hp at 0 — the Game decides whether that means downed or dead. */
   takeDamage(amount: number) {
-    if (!this.alive || amount <= 0) return
-    this.hp -= amount
+    if (!this.alive || this.downed || amount <= 0) return
+    this.hp = Math.max(0, this.hp - amount)
     this.lastHitAt = this.time
-    if (this.hp <= 0) {
-      this.hp = 0
-      this.alive = false
-    }
+  }
+
+  revive() {
+    this.downed = false
+    this.hp = 50
   }
 
   get recentlyHit(): boolean {
@@ -38,12 +41,18 @@ export class Player {
   update(dt: number, input: Input, colliders: Collider[]) {
     if (!this.alive) return
     this.time += dt
-    if (this.time - this.lastHitAt > Player.REGEN_DELAY && this.hp < this.maxHp) {
+    if (
+      !this.downed &&
+      this.time - this.lastHitAt > Player.REGEN_DELAY &&
+      this.hp < this.maxHp &&
+      this.hp > 0
+    ) {
       this.hp = Math.min(this.maxHp, this.hp + Player.REGEN_RATE * dt)
     }
     const look = input.consumeLook()
     this.yaw -= look.x
     this.pitch = THREE.MathUtils.clamp(this.pitch - look.y, -1.45, 1.45)
+    if (this.downed) return // can look around while waiting for a revive, not move
 
     const move = input.moveVec()
     const speed = input.sprint && move.z > 0.3 ? SPRINT_SPEED : WALK_SPEED

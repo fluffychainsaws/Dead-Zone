@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { Zombie } from './zombie'
+import { Zombie, type TargetInfo } from './zombie'
 import type { Collider } from './arena'
 
 export type WavePhase = 'idle' | 'intermission' | 'active'
@@ -38,11 +38,12 @@ export class Horde {
     return z
   }
 
-  /** Returns total damage dealt to the player this frame. */
-  update(dt: number, playerPos: THREE.Vector3, colliders: Collider[]): number {
-    let damage = 0
+  /** Returns damage dealt this frame, keyed by target id. */
+  update(dt: number, targets: TargetInfo[], colliders: Collider[]): Record<string, number> {
+    const damage: Record<string, number> = {}
     for (const z of this.zombies) {
-      damage += z.update(dt, playerPos, colliders, this.zombies)
+      const hit = z.update(dt, targets, colliders, this.zombies)
+      if (hit) damage[hit.targetId] = (damage[hit.targetId] ?? 0) + hit.damage
     }
     this.zombies = this.zombies.filter((z) => !z.dead)
     return damage

@@ -84,13 +84,21 @@ body {
   display: none;
 }
 
-#play-btn {
-  pointer-events: auto;
+#menu-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.9rem;
   margin-top: 1.5rem;
-  padding: 0.9rem 2.6rem;
+}
+
+#menu-buttons button,
+#join-row button {
+  pointer-events: auto;
+  padding: 0.85rem 2rem;
   font-family: var(--font-display);
-  font-size: clamp(1.1rem, 4vw, 1.6rem);
-  letter-spacing: 0.18em;
+  font-size: clamp(1rem, 3.4vw, 1.4rem);
+  letter-spacing: 0.16em;
   color: var(--bone);
   background: rgba(10, 20, 8, 0.7);
   border: 2px solid var(--bone);
@@ -101,10 +109,52 @@ body {
   transition: transform 0.12s, box-shadow 0.12s;
 }
 
-#play-btn:hover,
-#play-btn:active {
+#menu-buttons button:hover,
+#menu-buttons button:active,
+#join-row button:hover {
   transform: scale(1.05);
   box-shadow: 0 0 30px rgba(132, 255, 90, 0.5), inset 0 0 18px rgba(132, 255, 90, 0.15);
+}
+
+#join-row {
+  display: none;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+#join-row.open {
+  display: flex;
+}
+
+#join-row input {
+  pointer-events: auto;
+  width: 9ch;
+  padding: 0.7rem 0.9rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--bone);
+  background: rgba(8, 14, 6, 0.85);
+  border: 2px solid rgba(132, 255, 90, 0.45);
+  border-radius: 4px;
+  outline: none;
+}
+
+#room-info {
+  position: absolute;
+  left: 50%;
+  top: calc(env(safe-area-inset-top) + 14px);
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.22em;
+  color: var(--bone);
+  opacity: 0.85;
+  text-shadow: 0 0 8px rgba(132, 255, 90, 0.4);
+  white-space: nowrap;
+  display: none;
 }
 
 /* ---------------- HUD ---------------- */

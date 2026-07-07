@@ -6,10 +6,17 @@ import { WeaponSystem } from './weapons'
 import { Effects } from './effects'
 import { Horde, WaveSystem } from './waves'
 import { Economy, POINTS } from './economy'
+import { RemotePlayer, RemoteZombieField } from './remote'
+import { NetRoom, selfId, type GameState, type PlayerState } from '../net/room'
+import type { TargetInfo } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
 
 type Mode = 'menu' | 'playing' | 'dead'
+type NetMode = 'solo' | 'host' | 'client'
+
+const NET_RATE = 1 / 12 // send rate for state/input
+const REVIVE_RANGE = 2.4
 
 export class Game {
   private renderer: THREE.WebGLRenderer
@@ -28,6 +35,16 @@ export class Game {
   private clock = new THREE.Clock()
   private mode: Mode = 'menu'
 
+  // --- multiplayer state ---
+  private netMode: NetMode = 'solo'
+  private net: NetRoom | null = null
+  private remotePlayers = new Map<string, RemotePlayer>()
+  private peerStates = new Map<string, PlayerState>()
+  private remoteZombies: RemoteZombieField
+  private netTimer = 0
+  private hostId: string | null = null
+  private clientWave = 0
+
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -43,6 +60,7 @@ export class Game {
     this.economy.buildStations(this.scene)
     this.hud = new Hud(this.input.isTouch)
     this.horde = new Horde(this.scene)
+    this.remoteZombies = new RemoteZombieField(this.scene)
     this.waves = new WaveSystem(this.horde, this.arena.spawnPoints, {
       onWaveStart: (w) => {
         this.hud.setWave(w)
@@ -61,17 +79,149 @@ export class Game {
     this.renderer.setAnimationLoop(() => this.tick())
   }
 
-  start() {
+  // ------------------------------ session starts ------------------------------
+
+  startSolo() {
+    this.netMode = 'solo'
+    this.beginPlaying()
+    this.waves.begin()
+  }
+
+  startHost(code: string) {
+    this.netMode = 'host'
+    this.net = new NetRoom(code)
+    this.bindCommonNet()
+    this.net.onInput((s, from) => {
+      this.peerStates.set(from, s)
+      this.ensureAvatar(from).applyState(s)
+    })
+    this.net.onShot((shot, from) => {
+      // trust the peer's hit — co-op, host applies authoritative damage
+      this.effects.tracer(
+        new THREE.Vector3(...shot.from),
+        new THREE.Vector3(...shot.to),
+      )
+      const z = this.horde.zombies.find((x) => x.id === shot.zid && x.alive)
+      if (!z) return
+      this.effects.impact(new THREE.Vector3(...shot.to), 'blood')
+      const def = Object.values(this.weaponDefs()).find((d) => d.id === shot.wid)
+      const dmg = (def?.damage ?? 30) * (shot.head ? (def?.headshotMult ?? 2) : 1)
+      const killed = z.damage(dmg)
+      if (killed) this.waves.registerKill(z, shot.head === 1)
+      this.net!.sendScore(
+        { amt: POINTS.hit + (killed ? (shot.head ? POINTS.headshotKill : POINTS.kill) : 0), kill: killed ? 1 : 0, head: shot.head },
+        from,
+      )
+    })
+    this.hud.setRoomInfo(`CODE: ${code}`)
+    this.beginPlaying()
+    this.waves.begin()
+  }
+
+  startClient(code: string) {
+    this.netMode = 'client'
+    this.net = new NetRoom(code)
+    this.bindCommonNet()
+    this.net.onState((s, from) => {
+      this.hostId = from
+      this.applyHostState(s, from)
+    })
+    this.net.onScore((s) => {
+      this.earn(s.amt)
+      audio.zombieHit()
+      this.hud.hitmarker(s.kill ? (s.head ? 'headshot' : 'kill') : 'hit')
+    })
+    this.net.onAttack((dmg) => {
+      this.player.takeDamage(dmg)
+      audio.playerHurt()
+    })
+    this.net.onOver(() => this.gameOver())
+    this.hud.setRoomInfo(`JOINED: ${code}`)
+    this.beginPlaying()
+    this.hud.banner('CONNECTING…', 4000)
+  }
+
+  private bindCommonNet() {
+    if (!this.net) return
+    this.net.onRevive((target) => {
+      if (target === selfId && this.player.downed) {
+        this.player.revive()
+        this.hud.banner('REVIVED', 1500)
+      }
+    })
+    this.net.onPeerJoin((id) => {
+      this.hud.banner('SURVIVOR JOINED', 1800)
+      this.ensureAvatar(id)
+      this.updateRoomCount()
+    })
+    this.net.onPeerLeave((id) => {
+      const avatar = this.remotePlayers.get(id)
+      if (avatar) this.scene.remove(avatar.group)
+      this.remotePlayers.delete(id)
+      this.peerStates.delete(id)
+      this.updateRoomCount()
+      if (this.netMode === 'client' && id === this.hostId) {
+        this.hud.banner('HOST LEFT — GAME ENDED', 5000)
+        setTimeout(() => location.reload(), 3200)
+      } else {
+        this.hud.banner('SURVIVOR LEFT', 1800)
+      }
+    })
+  }
+
+  private updateRoomCount() {
+    if (!this.net) return
+    const n = this.net.peers().length + 1
+    const label = this.netMode === 'host' ? `CODE: ${this.net.code}` : `JOINED: ${this.net.code}`
+    this.hud.setRoomInfo(`${label} · ${n} SURVIVOR${n > 1 ? 'S' : ''}`)
+  }
+
+  private beginPlaying() {
     this.mode = 'playing'
     this.weapon.setVisible(true)
     this.hud.show()
     this.hud.setPoints(this.economy.points)
     this.input.requestLock()
-    this.waves.begin()
     audio.unlock()
     audio.startMusic()
     audio.setIntensity(0.1)
   }
+
+  private weaponDefs() {
+    // avoids importing WEAPONS at use sites; single source in weapons.ts
+    return this.weapon.allDefs()
+  }
+
+  private ensureAvatar(id: string): RemotePlayer {
+    let avatar = this.remotePlayers.get(id)
+    if (!avatar) {
+      avatar = new RemotePlayer(this.scene, id.slice(0, 6))
+      this.remotePlayers.set(id, avatar)
+    }
+    return avatar
+  }
+
+  // ------------------------------ client state sync ------------------------------
+
+  private applyHostState(s: GameState, hostId: string) {
+    if (s.w !== this.clientWave) {
+      this.clientWave = s.w
+      this.hud.setWave(s.w)
+      if (s.w > 0) {
+        this.hud.banner(`WAVE ${s.w}`)
+        audio.waveStinger()
+        audio.setIntensity(Math.min(0.15 + s.w * 0.08, 1))
+      }
+    }
+    this.remoteZombies.applyState(s.z)
+    for (const [pid, ps] of Object.entries(s.p)) {
+      if (pid === selfId) continue
+      // host relays every player's state (including its own under hostId)
+      this.ensureAvatar(pid === 'host' ? hostId : pid).applyState(ps)
+    }
+  }
+
+  // ------------------------------ scoring / shopping / groans ------------------------------
 
   private earn(amount: number) {
     this.economy.earn(amount)
@@ -82,22 +232,50 @@ export class Game {
   private updateGroans(dt: number) {
     this.groanTimer -= dt
     if (this.groanTimer > 0) return
-    const alive = this.horde.zombies.filter((z) => z.alive)
-    if (alive.length === 0) {
+    let source: { pos: THREE.Vector3; runner: boolean } | null = null
+    if (this.netMode === 'client') {
+      source = this.remoteZombies.randomGroanSource()
+    } else {
+      const alive = this.horde.zombies.filter((z) => z.alive)
+      if (alive.length > 0) {
+        const z = alive[Math.floor(Math.random() * alive.length)]
+        source = { pos: z.group.position, runner: z.runner }
+      }
+    }
+    if (!source) {
       this.groanTimer = 2
       return
     }
-    this.groanTimer = 1.1 + Math.random() * 2.4 - Math.min(alive.length * 0.05, 0.8)
-    const z = alive[Math.floor(Math.random() * alive.length)]
-    const dx = z.group.position.x - this.player.pos.x
-    const dz = z.group.position.z - this.player.pos.z
+    this.groanTimer = 1.1 + Math.random() * 2.4
+    const dx = source.pos.x - this.player.pos.x
+    const dz = source.pos.z - this.player.pos.z
     const dist = Math.hypot(dx, dz)
-    // pan by direction relative to where the player is facing
     const angle = Math.atan2(dx, dz) - this.player.yaw
-    audio.groan(-Math.sin(angle), Math.max(0, 1 - dist / 30), z.runner)
+    audio.groan(-Math.sin(angle), Math.max(0, 1 - dist / 30), source.runner)
+  }
+
+  /** Revive prompt takes priority over wall-buys. Returns true if it owned the prompt. */
+  private handleRevive(): boolean {
+    if (this.netMode === 'solo' || this.player.downed) return false
+    for (const [id, avatar] of this.remotePlayers) {
+      if (!avatar.down) continue
+      const d = this.player.pos.distanceTo(avatar.pos)
+      if (d < REVIVE_RANGE) {
+        const key = this.input.isTouch ? 'USE' : '[E]'
+        this.hud.setPrompt(`${key} REVIVE SURVIVOR`)
+        if (this.input.consumeInteract()) {
+          this.net?.sendRevive(id)
+          this.hud.banner('SURVIVOR REVIVED', 1500)
+          audio.purchase()
+        }
+        return true
+      }
+    }
+    return false
   }
 
   private handleShopping() {
+    if (this.handleRevive()) return
     const station = this.economy.nearestStation(this.player.pos)
     if (!station) {
       this.hud.setPrompt(null)
@@ -122,6 +300,81 @@ export class Game {
     }
   }
 
+  // ------------------------------ death / downs ------------------------------
+
+  private handleZeroHp() {
+    if (this.player.hp > 0 || this.player.downed || !this.player.alive) return
+    if (this.netMode === 'solo') {
+      this.player.alive = false
+      this.gameOver()
+      return
+    }
+    // co-op: go down, teammates can revive
+    const teammatesUp = [...this.remotePlayers.values()].some((p) => !p.down && p.hp > 0)
+    if (teammatesUp) {
+      this.player.downed = true
+      this.hud.banner('YOU ARE DOWN — WAIT FOR A REVIVE', 4000)
+      audio.playerHurt()
+    } else {
+      this.player.alive = false
+      if (this.netMode === 'host') this.net?.sendOver()
+      this.gameOver()
+    }
+  }
+
+  private gameOver() {
+    if (this.mode === 'dead') return
+    this.mode = 'dead'
+    audio.deathSting()
+    document.exitPointerLock?.()
+    this.hud.showGameOver(
+      this.netMode === 'client' ? this.clientWave : this.waves.wave,
+      this.waves.kills,
+      this.economy.totalEarned,
+      () => location.reload(),
+    )
+  }
+
+  // ------------------------------ net send ------------------------------
+
+  private netSend() {
+    if (!this.net) return
+    this.netTimer -= 1
+    if (this.netTimer > 0) return
+    this.netTimer = Math.max(1, Math.round(NET_RATE / 0.0166))
+
+    const self: PlayerState = [
+      this.player.pos.x,
+      this.player.pos.z,
+      this.player.yaw,
+      Math.round(this.player.hp),
+      this.player.downed ? 1 : 0,
+    ]
+    if (this.netMode === 'client') {
+      this.net.sendInput(self)
+      return
+    }
+    // host: broadcast the world
+    const state: GameState = {
+      w: this.waves.wave,
+      ph: this.waves.phase,
+      z: this.horde.zombies
+        .filter((z) => !z.dead)
+        .map((z) => [
+          z.id,
+          Number(z.group.position.x.toFixed(2)),
+          Number(z.group.position.z.toFixed(2)),
+          Number(z.group.rotation.y.toFixed(2)),
+          z.state === 'dying' ? 2 : z.state === 'attacking' ? 1 : 0,
+          z.runner ? 1 : 0,
+        ]),
+      p: { ...Object.fromEntries(this.peerStates), host: self },
+    }
+    this.net.sendState(state)
+  }
+
+  // ------------------------------ main loop ------------------------------
+
   private resize() {
     const { innerWidth: w, innerHeight: h } = window
     this.renderer.setSize(w, h, false)
@@ -140,58 +393,93 @@ export class Game {
       this.player.update(dt, this.input, this.arena.colliders)
       this.player.applyCamera(this.camera)
 
-      const targets = [...this.arena.colliderMeshes, ...this.horde.targets()]
-      const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
-      if (this.weapon.events.fired) audio.gunshot(this.weapon.def.id)
-      if (this.weapon.events.dryFired) audio.dryFire()
-      if (this.weapon.events.reloadStarted) audio.reload()
-      for (const hit of hits) {
-        if (!hit.object) continue
-        const zombie = this.horde.zombieFor(hit.object)
-        if (!zombie) continue
-        this.effects.impact(hit.point.clone(), 'blood')
-        const headshot = zombie.isHeadPart(hit.object)
-        const dmg = this.weapon.def.damage * (headshot ? this.weapon.def.headshotMult : 1)
-        this.earn(POINTS.hit)
-        audio.zombieHit()
-        if (zombie.damage(dmg)) {
-          this.waves.registerKill(zombie, headshot)
-          this.earn(headshot ? POINTS.headshotKill : POINTS.kill)
-          this.hud.hitmarker(headshot ? 'headshot' : 'kill')
-        } else {
-          this.hud.hitmarker('hit')
+      // shooting (disabled while downed)
+      if (!this.player.downed) {
+        const zombieTargets =
+          this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
+        const targets = [...this.arena.colliderMeshes, ...zombieTargets]
+        const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
+        if (this.weapon.events.fired) audio.gunshot(this.weapon.def.id)
+        if (this.weapon.events.dryFired) audio.dryFire()
+        if (this.weapon.events.reloadStarted) audio.reload()
+        for (const hit of hits) {
+          if (!hit.object) continue
+          if (this.netMode === 'client') {
+            const target = this.remoteZombies.idFor(hit.object)
+            if (!target) continue
+            this.effects.impact(hit.point.clone(), 'blood')
+            const origin = this.camera.getWorldPosition(new THREE.Vector3())
+            this.net?.sendShot({
+              zid: target.id,
+              head: target.head ? 1 : 0,
+              wid: this.weapon.def.id,
+              from: [origin.x, origin.y, origin.z],
+              to: [hit.point.x, hit.point.y, hit.point.z],
+            })
+          } else {
+            const zombie = this.horde.zombieFor(hit.object)
+            if (!zombie) continue
+            this.effects.impact(hit.point.clone(), 'blood')
+            const headshot = zombie.isHeadPart(hit.object)
+            const dmg =
+              this.weapon.def.damage * (headshot ? this.weapon.def.headshotMult : 1)
+            this.earn(POINTS.hit)
+            audio.zombieHit()
+            if (zombie.damage(dmg)) {
+              this.waves.registerKill(zombie, headshot)
+              this.earn(headshot ? POINTS.headshotKill : POINTS.kill)
+              this.hud.hitmarker(headshot ? 'headshot' : 'kill')
+            } else {
+              this.hud.hitmarker('hit')
+            }
+          }
         }
+        this.handleShopping()
+      } else {
+        this.hud.setPrompt(null)
       }
-
-      this.handleShopping()
       this.economy.update(dt)
 
-      const zombieDamage = this.horde.update(dt, this.player.pos, this.arena.colliders)
-      if (zombieDamage > 0) {
-        this.player.takeDamage(zombieDamage)
-        audio.playerHurt()
+      // simulation: host & solo run the horde; clients interpolate
+      if (this.netMode === 'client') {
+        this.remoteZombies.update(dt)
+      } else {
+        const targetInfos: TargetInfo[] = []
+        if (!this.player.downed && this.player.hp > 0)
+          targetInfos.push({ id: 'self', pos: this.player.pos })
+        for (const [id, avatar] of this.remotePlayers) {
+          if (!avatar.down && avatar.hp > 0) targetInfos.push({ id, pos: avatar.pos })
+        }
+        // nobody left standing? zombies idle on the last known spot
+        if (targetInfos.length === 0)
+          targetInfos.push({ id: 'nobody', pos: this.player.pos })
+        const damage = this.horde.update(dt, targetInfos, this.arena.colliders)
+        if (damage['self']) {
+          this.player.takeDamage(damage['self'])
+          audio.playerHurt()
+        }
+        for (const [id, dmg] of Object.entries(damage)) {
+          if (id !== 'self' && id !== 'nobody') this.net?.sendAttack(dmg, id)
+        }
+        this.waves.update(dt)
       }
-      this.waves.update(dt)
+
+      for (const avatar of this.remotePlayers.values()) avatar.update(dt)
       this.updateGroans(dt)
+      this.netSend()
+      this.handleZeroHp()
 
       this.hud.setAmmo(this.weapon.mag, this.weapon.reserve, this.weapon.reloading)
       this.hud.setWeaponName(this.weapon.def.name)
       this.hud.setHealth(this.player.hp, this.player.maxHp, this.player.recentlyHit)
-
-      if (!this.player.alive) {
-        this.mode = 'dead'
-        audio.deathSting()
-        document.exitPointerLock?.()
-        this.hud.showGameOver(
-          this.waves.wave,
-          this.waves.kills,
-          this.economy.totalEarned,
-          () => location.reload(),
-        )
-      }
     } else {
-      // dead: keep rendering the world, horde keeps milling around
-      this.horde.update(dt, this.player.pos, this.arena.colliders)
+      // dead: keep rendering; host keeps simulating so spectators see the end
+      if (this.netMode !== 'client') {
+        this.horde.update(dt, [{ id: 'nobody', pos: this.player.pos }], this.arena.colliders)
+      } else {
+        this.remoteZombies.update(dt)
+      }
+      for (const avatar of this.remotePlayers.values()) avatar.update(dt)
     }
 
     this.effects.update(dt)
