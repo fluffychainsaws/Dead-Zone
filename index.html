@@ -19,6 +19,7 @@
     <div id="app">
       <canvas id="scene"></canvas>
       <div id="title-screen">
+        <div class="fog"></div>
         <h1 class="game-title">DEAD&nbsp;ZONE</h1>
         <p class="tagline">The horde is coming.</p>
         <div id="menu-buttons">
@@ -39,7 +40,19 @@
           </div>
           <div id="lobby-list"><p class="lobby-empty">Scanning the dead zone…</p></div>
         </div>
+        <div id="menu-row2">
+          <button id="help-btn" class="ghost-btn">HOW TO PLAY</button>
+          <button id="install-btn" class="ghost-btn">📲 INSTALL APP</button>
+        </div>
+        <div id="info-panel">
+          <div id="info-head">
+            <span id="info-title"></span>
+            <button id="info-close">✕</button>
+          </div>
+          <div id="info-body"></div>
+        </div>
       </div>
+      <div id="rotate-hint">↻ ROTATE YOUR DEVICE — LANDSCAPE IS BEST</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -106,6 +106,114 @@ document.getElementById('lobby-close')!.addEventListener('click', leaveMenuLobby
 document.getElementById('play-btn')!.addEventListener('click', leaveMenuLobby)
 document.getElementById('host-btn')!.addEventListener('click', leaveMenuLobby)
 
+// ---------------- platform detection ----------------
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+const isIos =
+  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+const isStandalone =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  (navigator as unknown as { standalone?: boolean }).standalone === true
+
+// ---------------- info panel (help / install) ----------------
+
+const infoPanel = document.getElementById('info-panel')!
+const infoTitle = document.getElementById('info-title')!
+const infoBody = document.getElementById('info-body')!
+
+function openInfo(title: string, html: string) {
+  lobbyPanel.classList.remove('open')
+  infoTitle.textContent = title
+  infoBody.innerHTML = html
+  infoPanel.classList.add('open')
+}
+
+document.getElementById('info-close')!.addEventListener('click', () => {
+  infoPanel.classList.remove('open')
+})
+
+document.getElementById('help-btn')!.addEventListener('click', () => {
+  const controls = isTouchDevice
+    ? `<li><b>LEFT SIDE</b> — drag to move (push far to sprint)</li>
+       <li><b>RIGHT SIDE</b> — drag to aim</li>
+       <li><b>FIRE</b> — hold the red button</li>
+       <li><b>R</b> — reload &nbsp;·&nbsp; <b>⇄</b> — swap weapon &nbsp;·&nbsp; <b>USE</b> — buy / revive</li>`
+    : `<li><b>WASD</b> — move &nbsp;·&nbsp; <b>SHIFT</b> — sprint</li>
+       <li><b>MOUSE</b> — aim &nbsp;·&nbsp; <b>CLICK</b> — fire</li>
+       <li><b>R</b> — reload &nbsp;·&nbsp; <b>Q</b> — swap weapon</li>
+       <li><b>E</b> — buy weapons / ammo, revive teammates</li>`
+  openInfo(
+    'HOW TO PLAY',
+    `<ul>${controls}</ul>
+     <p>Survive endless waves. Kills earn <b>points</b> — spend them at the glowing
+     wall-buy stations for bigger guns and ammo. Headshots pay more.</p>
+     <p><b>HOST</b> a game and share your code, browse the <b>LOBBY</b> to join
+     strangers, or go it alone. Downed friends can be revived — nobody left standing
+     means the zone wins.</p>`,
+  )
+})
+
+// ---------------- PWA install ----------------
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: string }>
+}
+
+let deferredInstall: BeforeInstallPromptEvent | null = null
+const installBtn = document.getElementById('install-btn')!
+
+if (isStandalone) installBtn.style.display = 'none'
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  deferredInstall = e as BeforeInstallPromptEvent
+})
+
+window.addEventListener('appinstalled', () => {
+  installBtn.style.display = 'none'
+  infoPanel.classList.remove('open')
+})
+
+installBtn.addEventListener('click', async () => {
+  if (deferredInstall) {
+    await deferredInstall.prompt()
+    deferredInstall = null
+    return
+  }
+  const steps = isIos
+    ? `<ol>
+         <li>Tap the <b>Share</b> button <span class="kbd">⎋⃞</span> in Safari's toolbar</li>
+         <li>Scroll down and tap <b>Add to Home Screen</b> <span class="kbd">＋</span></li>
+         <li>Tap <b>Add</b> — DEAD ZONE appears on your home screen</li>
+       </ol>
+       <p>Launching from the icon gives you fullscreen, offline-ready play.</p>`
+    : isTouchDevice
+      ? `<ol>
+           <li>Open your browser's <b>⋮ menu</b></li>
+           <li>Tap <b>Add to Home screen</b> (or <b>Install app</b>)</li>
+           <li>Confirm — DEAD ZONE installs like a native app</li>
+         </ol>`
+      : `<ol>
+           <li>Look for the <b>install icon</b> in your address bar (Chrome/Edge)</li>
+           <li>Or open the browser menu → <b>Install DEAD ZONE…</b></li>
+           <li>The game opens in its own window, works offline</li>
+         </ol>`
+  openInfo('INSTALL AS APP', steps)
+})
+
+// ---------------- orientation hint ----------------
+
+if (isTouchDevice) {
+  const hint = document.getElementById('rotate-hint')!
+  const orient = window.matchMedia('(orientation: portrait)')
+  const reflectOrient = () => hint.classList.toggle('show', orient.matches)
+  orient.addEventListener('change', reflectOrient)
+  hint.addEventListener('click', () => hint.classList.remove('show'))
+  reflectOrient()
+}
+
 // audio toggles — present on title screen and in-game
 const toggles = document.createElement('div')
 toggles.id = 'audio-toggles'
