@@ -23,6 +23,14 @@ document.getElementById('play-btn')!.addEventListener('click', () => {
   game.startSolo()
 })
 
+// invite deep-links: dead-zone/#join=CODE drops you straight into the game
+const joinMatch = location.hash.match(/^#join=([A-Z0-9]{4,6})$/i)
+if (joinMatch) {
+  history.replaceState(null, '', location.pathname)
+  hideTitle()
+  game.startClient(joinMatch[1].toUpperCase())
+}
+
 document.getElementById('host-btn')!.addEventListener('click', () => {
   hideTitle()
   game.startHost(makeGameCode())

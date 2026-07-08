@@ -1,4 +1,6 @@
 export class Hud {
+  onPause: (() => void) | null = null
+
   private root: HTMLElement
   private ammoEl: HTMLElement
   private healthFill: HTMLElement
@@ -25,6 +27,7 @@ export class Hud {
       <div id="crosshair"></div>
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
       <div id="room-info"></div>
+      <button id="pause-btn">☰</button>
       <div id="wave-banner"></div>
       <div id="health-bar"><div id="health-fill"></div></div>
       <div id="points">500</div>
@@ -54,6 +57,7 @@ export class Hud {
     this.promptEl = this.root.querySelector('#prompt')!
     this.hitmarkerEl = this.root.querySelector('#hitmarker')!
     this.weaponEl = this.root.querySelector('#weapon-name')!
+    this.root.querySelector('#pause-btn')!.addEventListener('click', () => this.onPause?.())
   }
 
   setPoints(points: number) {

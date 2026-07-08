@@ -12,6 +12,7 @@ import { Lobby, shortName } from '../net/lobby'
 import type { TargetInfo } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
+import { PauseMenu } from '../ui/pause'
 
 type Mode = 'menu' | 'playing' | 'dead'
 type NetMode = 'solo' | 'host' | 'client'
@@ -46,6 +47,8 @@ export class Game {
   private hostId: string | null = null
   private clientWave = 0
   private lobby: Lobby | null = null
+  private pause = new PauseMenu()
+  private paused = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -76,9 +79,50 @@ export class Game {
       },
     })
 
+    this.pause.onResume = () => {
+      this.paused = false
+      this.input.requestLock()
+    }
+    this.pause.onLeave = () => {
+      this.net?.leave()
+      this.lobby?.leave()
+      location.reload()
+    }
+    // Esc in pointer lock releases the lock — treat that as "open the menu"
+    document.addEventListener('pointerlockchange', () => {
+      if (
+        !document.pointerLockElement &&
+        this.mode === 'playing' &&
+        !this.input.isTouch &&
+        !this.paused
+      ) {
+        this.openPause()
+      }
+    })
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.mode === 'playing') {
+        if (this.paused) {
+          this.pause.close()
+          this.paused = false
+          this.input.requestLock()
+        } else {
+          this.openPause()
+        }
+      }
+    })
+
     window.addEventListener('resize', () => this.resize())
     this.resize()
     this.renderer.setAnimationLoop(() => this.tick())
+  }
+
+  private openPause() {
+    if (this.mode !== 'playing' || this.paused) return
+    this.paused = true
+    this.pause.setInvite(this.netMode === 'solo' ? null : (this.net?.code ?? null))
+    this.pause.setPauseNote(this.netMode === 'solo')
+    this.pause.open()
+    document.exitPointerLock?.()
   }
 
   // ------------------------------ session starts ------------------------------
@@ -191,6 +235,7 @@ export class Game {
     this.mode = 'playing'
     this.weapon.setVisible(true)
     this.hud.show()
+    this.hud.onPause = () => this.openPause()
     this.hud.setPoints(this.economy.points)
     this.input.requestLock()
     audio.unlock()
@@ -381,6 +426,8 @@ export class Game {
   private gameOver() {
     if (this.mode === 'dead') return
     this.mode = 'dead'
+    this.pause.close()
+    this.paused = false
     this.lobby?.leave()
     this.lobby = null
     audio.deathSting()
@@ -450,7 +497,22 @@ export class Game {
       this.camera.position.set(Math.sin(t * 0.07) * 16, 7, Math.cos(t * 0.07) * 16)
       this.camera.lookAt(0, 1, 0)
     } else if (this.mode === 'playing') {
-      this.player.update(dt, this.input, this.arena.playerColliders)
+      if (this.paused) {
+        // discard buffered input so nothing fires or jerks on resume
+        this.input.consumeLook()
+        this.input.consumeFirePress()
+        this.input.consumeReload()
+        this.input.consumeInteract()
+        this.input.consumeSwitch()
+        this.input.consumeJump()
+        if (this.netMode === 'solo') {
+          // solo pause freezes the whole world
+          this.renderer.render(this.scene, this.camera)
+          return
+        }
+      } else {
+        this.player.update(dt, this.input, this.arena.playerColliders)
+      }
       // the horde has mass — you can't wade through it
       const bodies =
         this.netMode === 'client'
@@ -459,8 +521,8 @@ export class Game {
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
 
-      // shooting (disabled while downed)
-      if (!this.player.downed) {
+      // shooting (disabled while downed or in the menu)
+      if (!this.player.downed && !this.paused) {
         const zombieTargets =
           this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
         const targets = [...this.arena.colliderMeshes, ...zombieTargets]

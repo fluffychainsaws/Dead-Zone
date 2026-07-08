@@ -669,6 +669,90 @@ body {
   white-space: nowrap;
 }
 
+/* ---------------- pause menu ---------------- */
+
+#pause-btn {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 18px);
+  top: calc(env(safe-area-inset-top) + 52px);
+  width: 42px;
+  height: 42px;
+  font-size: 1.1rem;
+  border-radius: 6px;
+  border: 1px solid rgba(132, 255, 90, 0.4);
+  background: rgba(14, 22, 10, 0.6);
+  color: var(--bone);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#pause-menu {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 4, 0.78);
+  z-index: 30;
+  pointer-events: auto;
+}
+
+#pause-menu.open {
+  display: flex;
+}
+
+#pause-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: min(360px, 84vw);
+  padding: 1.6rem 1.8rem;
+  background: rgba(8, 14, 6, 0.95);
+  border: 2px solid rgba(132, 255, 90, 0.4);
+  border-radius: 8px;
+  text-align: center;
+}
+
+#pause-box h2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  letter-spacing: 0.12em;
+  color: var(--blood-bright);
+  text-shadow: 0 0 12px rgba(224, 32, 32, 0.5);
+}
+
+#pause-note {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  min-height: 1em;
+}
+
+#pause-box button {
+  padding: 0.75rem 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.14em;
+  color: var(--bone);
+  background: rgba(10, 20, 8, 0.7);
+  border: 2px solid var(--bone);
+  border-radius: 4px;
+  cursor: pointer;
+  text-shadow: 0 0 10px rgba(132, 255, 90, 0.5);
+}
+
+#pause-box button:hover {
+  transform: scale(1.03);
+}
+
+#pause-box #pause-leave {
+  color: var(--blood-bright);
+  border-color: rgba(224, 32, 32, 0.6);
+  background: rgba(40, 8, 8, 0.5);
+  text-shadow: 0 0 10px rgba(224, 32, 32, 0.5);
+}
+
 /* ---------------- audio toggles ---------------- */
 
 #audio-toggles {
