@@ -148,7 +148,24 @@ export class Zombie {
       const wd = Math.hypot(wx, wz) || 1
       let mx = (wx / wd) * this.speed
       let mz = (wz / wd) * this.speed
-      this.group.rotation.y = Math.atan2(wx, wz)
+      // whisker steering: if the path directly ahead is blocked by an obstacle,
+      // swing the heading in 45° steps until a clear probe is found
+      if (this.blockedAhead(nav.colliders, mx, mz)) {
+        const flip = this.id % 2 === 0 ? 1 : -1
+        for (const a of [0.785, -0.785, 1.57, -1.57]) {
+          const ang = a * flip
+          const ca = Math.cos(ang)
+          const sa = Math.sin(ang)
+          const rx = mx * ca - mz * sa
+          const rz = mx * sa + mz * ca
+          if (!this.blockedAhead(nav.colliders, rx, rz)) {
+            mx = rx
+            mz = rz
+            break
+          }
+        }
+      }
+      this.group.rotation.y = Math.atan2(mx, mz)
       for (const o of others) {
         if (o === this || !o.alive) continue
         const ox = pos.x - o.group.position.x
@@ -203,7 +220,24 @@ export class Zombie {
   }
 
   isHeadPart(obj: THREE.Object3D): boolean {
-    return obj === this.parts.head
+    return obj === this.parts.head || obj.parent === this.parts.head
+  }
+
+  private blockedAhead(colliders: Collider[], dx: number, dz: number): boolean {
+    const len = Math.hypot(dx, dz) || 1
+    const px = this.group.position.x + (dx / len) * 1.0
+    const pz = this.group.position.z + (dz / len) * 1.0
+    for (const c of colliders) {
+      if (
+        px > c.minX - RADIUS &&
+        px < c.maxX + RADIUS &&
+        pz > c.minZ - RADIUS &&
+        pz < c.maxZ + RADIUS
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   private resolve(colliders: Collider[], axis: 'x' | 'z') {
@@ -256,6 +290,19 @@ function buildZombieMesh(runner: boolean): { group: THREE.Group; parts: Parts } 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 0.26), skin)
   head.position.y = 1.34
   head.name = 'head'
+  // glowing eyes + slack mouth on the front face (+z = facing direction)
+  const eyeMat = new THREE.MeshBasicMaterial({ color: runner ? 0xff2a1a : 0xc8e04a })
+  const eyeGeo = new THREE.BoxGeometry(0.055, 0.045, 0.02)
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
+  eyeL.position.set(-0.062, 0.045, 0.132)
+  const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
+  eyeR.position.set(0.062, 0.045, 0.132)
+  const mouth = new THREE.Mesh(
+    new THREE.BoxGeometry(0.13, runner ? 0.07 : 0.045, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0x140404 }),
+  )
+  mouth.position.set(0, -0.075, 0.132)
+  head.add(eyeL, eyeR, mouth)
 
   const armGeo = new THREE.BoxGeometry(0.12, 0.52, 0.12)
   armGeo.translate(0, -0.26, 0) // pivot at shoulder

@@ -368,21 +368,35 @@ export class Arena {
   }
 
   private buildCells() {
-    // holding cells along the south wall of the cell block: dividers + bar fronts
-    for (let x = -25; x <= 25; x += 5) {
-      if (Math.abs(x - -15) < 2.5 || Math.abs(x - 15) < 2.5) {
-        // keep breach cells clear so zombies pour straight through
-        this.box(x, 20.5, 0.3, 3, 3.2, this.cellMat)
-        continue
-      }
+    // holding cells along the south wall: dividers between slots, and every slot
+    // fully barred shut — except the two breach corridors the horde pours through.
+    // Nobody (player or zombie) can enter a cell, so nobody gets trapped in one.
+    for (let x = -27.5; x <= 27.5; x += 5) {
       this.box(x, 20.5, 0.3, 3, 3.2, this.cellMat)
-      // partial bar front with an open doorway (players can duck into cells)
-      const front = new THREE.BoxGeometry(2.4, 2.6, 0.12)
-      front.translate(x - 1.2, 1.3, 19)
-      this.addStatic(front, this.barMat)
-      this.playerColliders.push({ minX: x - 2.4, maxX: x - 0.05, minZ: 18.9, maxZ: 19.1 })
-      this.zombieColliders.push({ minX: x - 2.4, maxX: x - 0.05, minZ: 18.9, maxZ: 19.1 })
     }
+    const barSlot = (cx: number, width: number) => {
+      const count = Math.floor(width / 0.52)
+      for (let i = 0; i < count; i++) {
+        const bar = new THREE.CylinderGeometry(0.045, 0.045, 3.0, 6)
+        bar.translate(cx - width / 2 + (i + 0.5) * (width / count), 1.5, 19)
+        this.addStatic(bar, this.barMat)
+      }
+      for (const y of [0.15, 2.95]) {
+        const rail = new THREE.BoxGeometry(width - 0.2, 0.12, 0.12)
+        rail.translate(cx, y, 19)
+        this.addStatic(rail, this.barMat)
+      }
+      const c: Collider = { minX: cx - width / 2, maxX: cx + width / 2, minZ: 18.9, maxZ: 19.1 }
+      this.playerColliders.push(c)
+      this.zombieColliders.push(c)
+    }
+    for (let cx = -25; cx <= 25; cx += 5) {
+      if (Math.abs(cx) === 15) continue // breach corridors stay open
+      barSlot(cx, 4.7)
+    }
+    // corner stubs beyond the last dividers
+    barSlot(-28.75, 2.3)
+    barSlot(28.75, 2.3)
   }
 
   private buildProps() {
