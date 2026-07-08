@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { makeLabelSprite } from './economy'
 
 // Blackmarsh Penitentiary — a broken-down jail. Zombies crawl in through
 // breached cell walls and boarded windows (player-blocking, zombie-passable);
@@ -301,6 +302,9 @@ export class Arena {
         group.add(cross)
         meshes.push(cross)
       }
+      const label = makeLabelSprite([d.name, `${d.cost}`])
+      label.position.y = 4.1
+      group.add(label)
       this.scene.add(group)
       this.colliderMeshes.push(...meshes)
       const c: Collider = {

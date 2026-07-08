@@ -20,6 +20,7 @@ export type GameState = {
   ph: string // phase
   z: ZombieState[]
   p: Record<string, PlayerState>
+  d: number[] // opened door ids
 }
 
 export type ShotMsg = {
@@ -54,6 +55,7 @@ export class NetRoom {
   private attack
   private revive
   private over
+  private door
 
   constructor(code: string, roomPrefix = 'game') {
     this.code = code
@@ -65,6 +67,14 @@ export class NetRoom {
     this.attack = this.room.makeAction<number>('attack')
     this.revive = this.room.makeAction<string>('revive')
     this.over = this.room.makeAction<null>('over')
+    this.door = this.room.makeAction<number>('door')
+  }
+
+  sendDoor(id: number) {
+    void this.door.send(id)
+  }
+  onDoor(cb: (id: number, from: string) => void) {
+    this.door.onMessage = (id, ctx) => cb(id, ctx.peerId)
   }
 
   sendState(s: GameState) {

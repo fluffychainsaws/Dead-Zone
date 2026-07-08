@@ -97,6 +97,7 @@ export class Game {
       this.peerStates.set(from, s)
       this.ensureAvatar(from).applyState(s)
     })
+    this.net.onDoor((id) => this.openDoorEverywhere(id))
     this.net.onShot((shot, from) => {
       // trust the peer's hit — co-op, host applies authoritative damage
       this.effects.tracer(
@@ -231,6 +232,9 @@ export class Game {
         audio.setIntensity(Math.min(0.15 + s.w * 0.08, 1))
       }
     }
+    for (const id of s.d ?? []) {
+      if (!this.arena.doors[id]?.open) this.openDoorEverywhere(id, false)
+    }
     this.remoteZombies.applyState(s.z)
     for (const [pid, ps] of Object.entries(s.p)) {
       if (pid === selfId) continue
@@ -292,8 +296,42 @@ export class Game {
     return false
   }
 
+  /** Buy open a locked gate. Returns true if it owned the prompt. */
+  private handleDoors(): boolean {
+    const door = this.arena.nearestClosedDoor(this.player.pos)
+    if (!door) return false
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    this.hud.setPrompt(`${key} OPEN ${door.name} — ${door.cost}`)
+    if (this.input.consumeInteract()) {
+      if (this.economy.spend(door.cost)) {
+        this.hud.setPoints(this.economy.points)
+        this.hud.pointsDelta(-door.cost)
+        this.openDoorEverywhere(door.id)
+        audio.purchase()
+      } else {
+        this.hud.banner('NOT ENOUGH POINTS', 1200)
+        audio.deny()
+      }
+    }
+    return true
+  }
+
+  private openDoorEverywhere(id: number, broadcast = true) {
+    const door = this.arena.doors[id]
+    if (!door || door.open) return
+    const closedRoom = this.arena.rooms.find(
+      (r) => door.rooms.includes(r.id) && !r.open,
+    )
+    this.arena.openDoor(id)
+    this.hud.banner(closedRoom ? `${closedRoom.name} OPENED` : 'GATE OPENED', 2600)
+    audio.waveStinger()
+    if (broadcast && this.netMode === 'client') this.net?.sendDoor(id)
+    // host: openDoorIds() rides along in the next state broadcast
+  }
+
   private handleShopping() {
     if (this.handleRevive()) return
+    if (this.handleDoors()) return
     const station = this.economy.nearestStation(this.player.pos)
     if (!station) {
       this.hud.setPrompt(null)
@@ -389,6 +427,7 @@ export class Game {
           z.runner ? 1 : 0,
         ]),
       p: { ...Object.fromEntries(this.peerStates), host: self },
+      d: this.arena.openDoorIds(),
     }
     this.net.sendState(state)
   }

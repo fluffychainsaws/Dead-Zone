@@ -23,7 +23,7 @@ const STATIONS: Array<{ weapon: string; price: number; pos: [number, number] }> 
   { weapon: 'kurz', price: 1500, pos: [28, -6] }, // warden's wing, east wall
 ]
 
-function makeLabelSprite(lines: string[]): THREE.Sprite {
+export function makeLabelSprite(lines: string[]): THREE.Sprite {
   const c = document.createElement('canvas')
   c.width = 512
   c.height = 128
