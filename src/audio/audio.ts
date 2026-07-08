@@ -347,6 +347,20 @@ export class AudioEngine {
     this.noiseHit({ decay: 0.2, freq: 300, gain: 0.5 })
   }
 
+  boxTick() {
+    this.tone({ from: 500 + Math.random() * 250, dur: 0.045, gain: 0.16, type: 'square' })
+  }
+
+  boxReveal() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    // little rising fanfare
+    for (const [i, f] of [440, 554, 659, 880].entries()) {
+      this.tone({ at: t + i * 0.09, from: f, dur: 0.22, gain: 0.22, type: 'triangle' })
+    }
+  }
+
   purchase() {
     const ctx = this.sfxReady()
     if (!ctx) return

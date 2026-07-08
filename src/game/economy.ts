@@ -25,6 +25,7 @@ const STATIONS: Array<{ weapon: string; price: number; pos: [number, number] }> 
   { weapon: 'magnum', price: 1800, pos: [25.5, -20.3] }, // warden's wing, north wall
   { weapon: 'liberator', price: 2500, pos: [-8.5, -20.3] }, // armory west
   { weapon: 'hellfire', price: 3200, pos: [8.5, -20.3] }, // armory east
+  { weapon: 'grinder', price: 3000, pos: [0, -20.3] }, // armory center — belt-fed
 ]
 
 export function makeLabelSprite(lines: string[]): THREE.Sprite {

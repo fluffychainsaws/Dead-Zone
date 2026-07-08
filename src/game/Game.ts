@@ -6,6 +6,7 @@ import { WeaponSystem } from './weapons'
 import { Effects } from './effects'
 import { Horde, WaveSystem } from './waves'
 import { Economy, POINTS } from './economy'
+import { MysteryBox, BOX_COST } from './mysterybox'
 import { RemotePlayer, RemoteZombieField } from './remote'
 import { NetRoom, selfId, type GameState, type PlayerState } from '../net/room'
 import { Lobby, shortName } from '../net/lobby'
@@ -51,6 +52,7 @@ export class Game {
   private paused = false
   private wasDowned = false
   private downNotified = new Set<string>()
+  private mysteryBox!: MysteryBox
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -65,6 +67,10 @@ export class Game {
     this.effects = new Effects(this.scene)
     this.weapon = new WeaponSystem(this.camera)
     this.economy.buildStations(this.scene)
+    this.mysteryBox = new MysteryBox(this.scene, {
+      tick: () => audio.boxTick(),
+      reveal: () => audio.boxReveal(),
+    })
     this.hud = new Hud(this.input.isTouch)
     this.horde = new Horde(this.scene)
     this.remoteZombies = new RemoteZombieField(this.scene)
@@ -410,9 +416,37 @@ export class Game {
     this.hud.updateReviveMarkers(markers)
   }
 
+  /** The Mystery Box interaction. Returns true if it owned the prompt. */
+  private handleMysteryBox(): boolean {
+    if (!this.mysteryBox.near(this.player.pos)) return false
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    this.hud.setPrompt(this.mysteryBox.prompt(key))
+    if (!this.input.consumeInteract()) return true
+    if (this.mysteryBox.state === 'idle') {
+      if (this.economy.spend(BOX_COST)) {
+        this.hud.setPoints(this.economy.points)
+        this.hud.pointsDelta(-BOX_COST)
+        this.mysteryBox.spin()
+        audio.purchase()
+      } else {
+        this.hud.banner('NOT ENOUGH POINTS', 1200)
+        audio.deny()
+      }
+    } else if (this.mysteryBox.state === 'offering') {
+      const def = this.mysteryBox.take()
+      if (def) {
+        this.weapon.give(def)
+        this.hud.banner(def.name, 2000)
+        audio.purchase()
+      }
+    }
+    return true
+  }
+
   private handleShopping() {
     if (this.handleRevive()) return
     if (this.handleDoors()) return
+    if (this.handleMysteryBox()) return
     const station = this.economy.nearestStation(this.player.pos)
     if (!station) {
       this.hud.setPrompt(null)
@@ -610,6 +644,7 @@ export class Game {
         this.hud.setPrompt(null)
       }
       this.economy.update(dt)
+      this.mysteryBox.update(dt)
       this.watchTeammates()
 
       // simulation: host & solo run the horde; clients interpolate
