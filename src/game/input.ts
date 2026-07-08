@@ -13,6 +13,7 @@ export class Input {
   private reloadPresses = 0
   private interactPresses = 0
   private switchPresses = 0
+  private jumpPresses = 0
   private joyX = 0
   private joyY = 0
   private canvas: HTMLCanvasElement
@@ -84,6 +85,14 @@ export class Input {
     return false
   }
 
+  consumeJump(): boolean {
+    if (this.jumpPresses > 0) {
+      this.jumpPresses--
+      return true
+    }
+    return false
+  }
+
   requestLock() {
     if (!this.isTouch && !this.locked) this.canvas.requestPointerLock()
   }
@@ -98,6 +107,7 @@ export class Input {
       if (e.code === 'KeyE' || e.code === 'KeyF') this.interactPresses++
       if (e.code === 'KeyQ' || e.code === 'Digit1' || e.code === 'Digit2')
         this.switchPresses++
+      if (e.code === 'Space') this.jumpPresses++
     })
     document.addEventListener('keyup', (e) => this.keys.delete(e.code))
     window.addEventListener('blur', () => this.keys.clear())
@@ -136,6 +146,7 @@ export class Input {
       <button id="btn-fire">FIRE</button>
       <button id="btn-reload">R</button>
       <button id="btn-swap">⇄</button>
+      <button id="btn-jump">▲</button>
       <button id="btn-interact">USE</button>
     `
     document.getElementById('app')!.appendChild(root)
@@ -228,6 +239,10 @@ export class Input {
     root.querySelector('#btn-swap')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.switchPresses++
+    })
+    root.querySelector('#btn-jump')!.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      this.jumpPresses++
     })
   }
 }

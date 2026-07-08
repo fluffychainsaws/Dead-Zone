@@ -793,6 +793,14 @@ body {
   font-size: 1.3rem;
 }
 
+#btn-jump {
+  right: calc(env(safe-area-inset-right) + 132px);
+  bottom: calc(env(safe-area-inset-bottom) + 190px);
+  width: 56px;
+  height: 56px;
+  font-size: 1.2rem;
+}
+
 #btn-interact {
   right: calc(env(safe-area-inset-right) + 140px);
   bottom: calc(env(safe-area-inset-bottom) + 118px);

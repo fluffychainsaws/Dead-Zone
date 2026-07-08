@@ -407,6 +407,7 @@ export class Game {
       this.player.yaw,
       Math.round(this.player.hp),
       this.player.downed ? 1 : 0,
+      Number(this.player.pos.y.toFixed(2)),
     ]
     if (this.netMode === 'client') {
       this.net.sendInput(self)
@@ -450,6 +451,12 @@ export class Game {
       this.camera.lookAt(0, 1, 0)
     } else if (this.mode === 'playing') {
       this.player.update(dt, this.input, this.arena.playerColliders)
+      // the horde has mass — you can't wade through it
+      const bodies =
+        this.netMode === 'client'
+          ? this.remoteZombies.targets().map((t) => t.position)
+          : this.horde.zombies.filter((z) => z.alive).map((z) => z.group.position)
+      this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
 
       // shooting (disabled while downed)

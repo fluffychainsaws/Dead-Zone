@@ -13,6 +13,8 @@ export interface Collider {
   maxX: number
   minZ: number
   maxZ: number
+  /** Top of the obstacle — players can jump over / stand on anything this low. Omit = wall. */
+  height?: number
 }
 
 export interface Room {
@@ -86,6 +88,17 @@ export class Arena {
     this.buildProps()
     this.buildLights()
     this.mergeStatics()
+    // invisible world edge so nobody sprints off into the fog
+    const BX = 42
+    const BZ = 34
+    const bounds: Collider[] = [
+      { minX: -BX - 2, maxX: BX + 2, minZ: -BZ - 2, maxZ: -BZ },
+      { minX: -BX - 2, maxX: BX + 2, minZ: BZ, maxZ: BZ + 2 },
+      { minX: -BX - 2, maxX: -BX, minZ: -BZ, maxZ: BZ },
+      { minX: BX, maxX: BX + 2, minZ: -BZ, maxZ: BZ },
+    ]
+    this.playerColliders.push(...bounds)
+    this.zombieColliders.push(...bounds)
   }
 
   // ---------------------------------------------------------------- geometry
@@ -129,6 +142,7 @@ export class Arena {
       maxX: cx + w / 2,
       minZ: cz - d / 2,
       maxZ: cz + d / 2,
+      height: (y ?? h / 2) + h / 2,
     }
     if (blocksPlayer) this.playerColliders.push(c)
     if (blocksZombie) this.zombieColliders.push(c)
@@ -187,17 +201,19 @@ export class Arena {
     const d = isX ? T : WIN_W
     const cx = isX ? at : fixed
     const cz = isX ? fixed : at
+    // a low sill players can vault with a jump — zombies crawl straight through
     const blocker: Collider = {
       minX: cx - w / 2,
       maxX: cx + w / 2,
       minZ: cz - d / 2,
       maxZ: cz + d / 2,
+      height: kind === 'window' ? 1.0 : 0.6,
     }
     this.playerColliders.push(blocker)
 
     if (kind === 'window') {
-      // two weathered planks bullets can pass between
-      for (const y of [0.55, 1.1]) {
+      // waist-high boarded sill — jump to vault it
+      for (const y of [0.35, 0.75]) {
         const plank = new THREE.BoxGeometry(
           isX ? WIN_W : T * 0.5,
           0.18,
@@ -207,13 +223,13 @@ export class Arena {
         plank.translate(cx, y, cz)
         this.addStatic(plank, this.plankMat)
       }
-      // shattered frame stubs above
+      // shattered frame stubs above — high enough to vault under
       const lintel = new THREE.BoxGeometry(
         isX ? WIN_W + 0.4 : T,
-        H - 2.2,
+        H - 3.1,
         isX ? T : WIN_W + 0.4,
       )
-      lintel.translate(cx, 2.2 + (H - 2.2) / 2, cz)
+      lintel.translate(cx, 3.1 + (H - 3.1) / 2, cz)
       this.addStatic(lintel, this.wallMat)
     } else {
       // breach: pile of rubble at the base of a collapsed wall section
@@ -484,23 +500,40 @@ export class Arena {
    * Where a zombie at `pos` should head to reach `target`:
    * outside → nearest opening; cross-room → next open gate on the BFS path.
    */
+  private nearestOpening(
+    pos: THREE.Vector3,
+    roomId: number | null,
+  ): Opening | null {
+    let best: Opening | null = null
+    let bestD = Infinity
+    for (const o of this.openings) {
+      if (roomId !== null && o.roomId !== roomId) continue
+      const d = Math.hypot(pos.x - o.outside.x, pos.z - o.outside.z)
+      if (d < bestD) {
+        bestD = d
+        best = o
+      }
+    }
+    return best
+  }
+
   nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
     const ra = this.roomOf(pos.x, pos.z)
-    if (ra === -1) {
-      // outside the building: crawl in through the nearest opening
-      let best: Opening | null = null
-      let bestD = Infinity
-      for (const o of this.openings) {
-        const d = Math.hypot(pos.x - o.outside.x, pos.z - o.outside.z)
-        if (d < bestD) {
-          bestD = d
-          best = o
-        }
-      }
-      return best ? best.inside : target
-    }
     const rb = this.roomOf(target.x, target.z)
-    if (rb === -1 || ra === rb) return target
+    if (ra === rb) return target
+    if (ra === -1) {
+      // outside the building: crawl in through an opening of the target's room
+      // (falls back to the nearest opening anywhere if the target is also outside)
+      const o = this.nearestOpening(pos, rb === -1 ? null : rb)
+      return o ? o.inside : target
+    }
+    if (rb === -1) {
+      // target fled outside: leave through this room's nearest opening
+      const o = this.nearestOpening(pos, ra)
+      if (!o) return target
+      const distToGap = Math.hypot(pos.x - o.inside.x, pos.z - o.inside.z)
+      return distToGap > 1.4 ? o.inside : o.outside
+    }
 
     // BFS over rooms connected by open doors
     const prevDoor = new Map<number, Door>()

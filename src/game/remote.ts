@@ -51,7 +51,7 @@ export class RemotePlayer {
   }
 
   applyState(s: PlayerState) {
-    this.targetPos.set(s[0], 0, s[1])
+    this.targetPos.set(s[0], s[5] ?? 0, s[1])
     this.targetYaw = s[2]
     this.hp = s[3]
     this.down = s[4] === 1

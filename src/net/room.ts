@@ -5,7 +5,14 @@ export { selfId }
 const APP_ID = 'dead-zone-fps-v1'
 
 // Compact wire formats (arrays keep packets small at 10-15Hz)
-export type PlayerState = [x: number, z: number, yaw: number, hp: number, down: 0 | 1]
+export type PlayerState = [
+  x: number,
+  z: number,
+  yaw: number,
+  hp: number,
+  down: 0 | 1,
+  y: number,
+]
 export type ZombieState = [
   id: number,
   x: number,
