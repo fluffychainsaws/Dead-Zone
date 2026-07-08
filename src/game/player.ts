@@ -11,14 +11,21 @@ const CROUCH_SPEED = 2.3
 const JUMP_VELOCITY = 7.6 // apex ≈ 1.3m — clears window sills and low props
 const GRAVITY = 22
 
-// Vaulting: a low obstacle directly ahead gets a scripted climb instead of a
-// plain jump, so clearing crates/sills doesn't depend on sprint-jump timing.
+// Vaulting: a low obstacle directly ahead gets a fully scripted climb — a fixed
+// distance and duration, not physics — so it always clears cleanly with no
+// fighting against normal movement/collision along the way.
 const VAULT_MIN_H = 0.25
 const VAULT_MAX_H = 1.55
 const VAULT_PROBE_DIST = 0.85
-const VAULT_VELOCITY = 5.6
-const VAULT_PUSH_SPEED = 3.4
-const VAULT_TIME = 0.45
+const VAULT_DURATION = 0.62 // slower, more deliberate than a plain jump
+const VAULT_DISTANCE = 2.6 // guaranteed forward carry, well past any vaultable width
+const VAULT_ESCAPE_STEP = 0.3
+const VAULT_ESCAPE_MAX_STEPS = 8
+const VAULT_ARC_HEIGHT = 1.8 // clears the tallest vaultable obstacle (VAULT_MAX_H) with margin
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t)
+}
 
 export class Player {
   pos = new THREE.Vector3(0, 0, 11) // middle of the cell block
@@ -36,7 +43,10 @@ export class Player {
   private time = 0
   private lastHitAt = -10
   private crouchT = 0 // 0 = standing, 1 = fully crouched (smoothed)
-  private vaultT = 0
+  private vaulting = false
+  private vaultElapsed = 0
+  private vaultStartX = 0
+  private vaultStartZ = 0
   private vaultDirX = 0
   private vaultDirZ = 0
   private static readonly REGEN_DELAY = 4
@@ -78,6 +88,28 @@ export class Player {
       return // can look around while waiting for a revive, not move
     }
 
+    if (this.vaulting) {
+      // fully scripted arc — no WASD, no collision, no gravity fighting it
+      this.vaultElapsed += dt
+      const t = Math.min(1, this.vaultElapsed / VAULT_DURATION)
+      const e = smoothstep(t)
+      this.pos.x = this.vaultStartX + this.vaultDirX * VAULT_DISTANCE * e
+      this.pos.z = this.vaultStartZ + this.vaultDirZ * VAULT_DISTANCE * e
+      this.pos.y = Math.sin(Math.PI * t) * VAULT_ARC_HEIGHT
+      input.consumeJump()
+      input.consumeCrouch()
+      if (t >= 1) {
+        this.vaulting = false
+        this.velY = 0
+        this.pos.y = this.floorHeight(colliders)
+        this.grounded = true
+        // if the landing spot still overlaps the obstacle's collision buffer,
+        // keep nudging straight ahead (never sideways) until it's actually clear
+        this.clearVaultLanding(colliders)
+      }
+      return
+    }
+
     if (input.consumeCrouch()) this.crouched = !this.crouched
     this.crouchT += ((this.crouched ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
 
@@ -107,8 +139,10 @@ export class Player {
         const fwdX = -Math.sin(this.yaw)
         const fwdZ = -Math.cos(this.yaw)
         if (this.probeVault(colliders, fwdX, fwdZ)) {
-          this.velY = VAULT_VELOCITY
-          this.vaultT = VAULT_TIME
+          this.vaulting = true
+          this.vaultElapsed = 0
+          this.vaultStartX = this.pos.x
+          this.vaultStartZ = this.pos.z
           this.vaultDirX = fwdX
           this.vaultDirZ = fwdZ
         } else {
@@ -117,22 +151,17 @@ export class Player {
         this.grounded = false
       }
     }
-    if (this.vaultT > 0) {
-      this.vaultT -= dt
-      // scripted carry over the obstacle — deliberately skips resolve() so the
-      // climb doesn't stall against the very ledge it's meant to clear
-      this.pos.x += this.vaultDirX * VAULT_PUSH_SPEED * dt
-      this.pos.z += this.vaultDirZ * VAULT_PUSH_SPEED * dt
-    }
-    this.velY -= GRAVITY * dt
-    this.pos.y += this.velY * dt
-    const floor = this.floorHeight(colliders)
-    if (this.pos.y <= floor && this.velY <= 0) {
-      this.pos.y = floor
-      this.velY = 0
-      this.grounded = true
-    } else if (this.pos.y > floor + 0.01) {
-      this.grounded = false
+    if (!this.vaulting) {
+      this.velY -= GRAVITY * dt
+      this.pos.y += this.velY * dt
+      const floor = this.floorHeight(colliders)
+      if (this.pos.y <= floor && this.velY <= 0) {
+        this.pos.y = floor
+        this.velY = 0
+        this.grounded = true
+      } else if (this.pos.y > floor + 0.01) {
+        this.grounded = false
+      }
     }
 
     const moving = Math.hypot(vx, vz)
@@ -183,6 +212,28 @@ export class Player {
       }
     }
     return false
+  }
+
+  /** Safety net: if landing still overlaps a blocker, keep walking forward (never sideways) until clear. */
+  private clearVaultLanding(colliders: Collider[]) {
+    for (let i = 0; i < VAULT_ESCAPE_MAX_STEPS; i++) {
+      let blocked = false
+      for (const c of colliders) {
+        if (!this.blocks(c)) continue
+        if (
+          this.pos.x > c.minX - RADIUS &&
+          this.pos.x < c.maxX + RADIUS &&
+          this.pos.z > c.minZ - RADIUS &&
+          this.pos.z < c.maxZ + RADIUS
+        ) {
+          blocked = true
+          break
+        }
+      }
+      if (!blocked) return
+      this.pos.x += this.vaultDirX * VAULT_ESCAPE_STEP
+      this.pos.z += this.vaultDirZ * VAULT_ESCAPE_STEP
+    }
   }
 
   private floorHeight(colliders: Collider[]): number {
