@@ -361,6 +361,11 @@ export class AudioEngine {
     }
   }
 
+  melee() {
+    this.noiseHit({ decay: 0.16, freq: 1100, filterType: 'bandpass', gain: 0.55 })
+    this.tone({ from: 220, to: 70, dur: 0.13, gain: 0.4 })
+  }
+
   purchase() {
     const ctx = this.sfxReady()
     if (!ctx) return

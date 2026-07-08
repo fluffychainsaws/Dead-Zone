@@ -8,7 +8,13 @@ import { Horde, WaveSystem, type WavePhase } from './waves'
 import { Economy, POINTS } from './economy'
 import { MysteryBox, BOX_COST } from './mysterybox'
 import { RemotePlayer, RemoteZombieField } from './remote'
-import { NetRoom, selfId, type GameState, type PlayerState } from '../net/room'
+import {
+  NetRoom,
+  selfId,
+  type GameState,
+  type PlayerState,
+  type ShotFxMsg,
+} from '../net/room'
 import { Lobby, shortName } from '../net/lobby'
 import type { TargetInfo } from './zombie'
 import { audio } from '../audio/audio'
@@ -20,6 +26,10 @@ type NetMode = 'solo' | 'host' | 'client'
 
 const NET_RATE = 1 / 12 // send rate for state/input
 const REVIVE_RANGE = 2.4
+const MELEE_RANGE = 2.4
+const MELEE_DAMAGE = 25
+const MELEE_PUSH = 2.0
+const MELEE_COOLDOWN = 0.7
 
 export class Game {
   private renderer: THREE.WebGLRenderer
@@ -56,6 +66,7 @@ export class Game {
   private wasDowned = false
   private downNotified = new Set<string>()
   private mysteryBox!: MysteryBox
+  private meleeCooldown = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -181,6 +192,28 @@ export class Game {
         from,
       )
     })
+    this.net.onMelee((msg, from) => {
+      let amt = 0
+      let anyKill = false
+      for (const id of msg.ids) {
+        const z = this.horde.zombies.find((x) => x.id === id && x.alive)
+        if (!z) continue
+        // sanity check against latency/spoofing — same trust model as onShot, just bounded
+        const dist = Math.hypot(z.group.position.x - msg.px, z.group.position.z - msg.pz)
+        if (dist > MELEE_RANGE + 2) continue
+        const dx = z.group.position.x - msg.px
+        const dz = z.group.position.z - msg.pz
+        const d = Math.hypot(dx, dz) || 1
+        const killed = z.meleeHit(MELEE_DAMAGE, dx / d, dz / d, MELEE_PUSH, this.arena.zombieColliders)
+        amt += POINTS.hit
+        if (killed) {
+          this.waves.registerKill(z, false)
+          amt += POINTS.kill
+          anyKill = true
+        }
+      }
+      if (amt > 0) this.net!.sendScore({ amt, kill: anyKill ? 1 : 0, head: 0 }, from)
+    })
   }
 
   private announceToLobby(code: string) {
@@ -227,6 +260,7 @@ export class Game {
 
   private bindCommonNet() {
     if (!this.net) return
+    this.net.onFx((fx) => this.renderRemoteFx(fx))
     this.net.onRevive((target) => {
       if (target === selfId && this.player.downed) {
         this.player.revive()
@@ -366,6 +400,73 @@ export class Game {
       if (pid === selfId) continue
       // host relays every player's state (including its own under hostId)
       this.ensureAvatar(pid === 'host' ? hostId : pid).applyState(ps)
+    }
+  }
+
+  // ------------------------------ remote shot fx ------------------------------
+
+  /** Render another player's tracers/impacts so everyone can see where teammates are shooting. */
+  private renderRemoteFx(fx: ShotFxMsg) {
+    const muzzle = new THREE.Vector3(...fx.muzzle)
+    audio.gunshot(fx.wid)
+    this.effects.muzzleFlash(muzzle)
+    for (const [x, y, z, hit] of fx.pts) {
+      const point = new THREE.Vector3(x, y, z)
+      this.effects.tracer(muzzle, point)
+      if (hit) this.effects.impact(point, this.isNearAnyZombie(point, 0.5) ? 'blood' : 'spark')
+    }
+  }
+
+  private isNearAnyZombie(point: THREE.Vector3, maxDist: number): boolean {
+    const positions =
+      this.netMode === 'client'
+        ? this.remoteZombies.targets().map((o) => o.position)
+        : this.horde.zombies.filter((z) => z.alive).map((z) => z.group.position)
+    for (const p of positions) if (point.distanceTo(p) < maxDist) return true
+    return false
+  }
+
+  /** Punch forward: light damage + a shove, clearing space rather than farming kills. */
+  private handleMelee() {
+    if (!this.input.consumeMelee()) return
+    if (this.player.downed || this.meleeCooldown > 0) return
+    this.meleeCooldown = MELEE_COOLDOWN
+    this.weapon.triggerMelee()
+    audio.melee()
+    const fwdX = -Math.sin(this.player.yaw)
+    const fwdZ = -Math.cos(this.player.yaw)
+    if (this.netMode === 'client') {
+      const ids = this.remoteZombies.meleeCandidates(
+        this.player.pos.x,
+        this.player.pos.z,
+        fwdX,
+        fwdZ,
+        MELEE_RANGE,
+      )
+      if (ids.length > 0) {
+        this.net?.sendMelee({ ids, px: this.player.pos.x, pz: this.player.pos.z, dx: fwdX, dz: fwdZ })
+      }
+    } else {
+      const results = this.horde.meleeSweep(
+        this.player.pos.x,
+        this.player.pos.z,
+        fwdX,
+        fwdZ,
+        MELEE_RANGE,
+        MELEE_DAMAGE,
+        MELEE_PUSH,
+        this.zombieNav(),
+      )
+      for (const r of results) {
+        this.earn(POINTS.hit)
+        if (r.killed) {
+          this.waves.registerKill(r.zombie, false)
+          this.earn(POINTS.kill)
+          this.hud.hitmarker('kill')
+        } else {
+          this.hud.hitmarker('hit')
+        }
+      }
     }
   }
 
@@ -598,6 +699,7 @@ export class Game {
       Math.round(this.player.hp),
       this.player.downed ? 1 : 0,
       Number(this.player.pos.y.toFixed(2)),
+      this.player.crouched ? 1 : 0,
     ]
     if (this.netMode === 'client') {
       this.net.sendInput(self)
@@ -653,6 +755,8 @@ export class Game {
         this.input.consumeInteract()
         this.input.consumeSwitch()
         this.input.consumeJump()
+        this.input.consumeCrouch()
+        this.input.consumeMelee()
         if (this.netMode === 'solo') {
           // solo pause freezes the whole world
           this.renderer.render(this.scene, this.camera)
@@ -716,6 +820,16 @@ export class Game {
             }
           }
         }
+        // let every peer see where teammates are shooting
+        if (this.weapon.events.fired && this.netMode !== 'solo' && hits.length > 0) {
+          this.net?.sendFx({
+            wid: this.weapon.def.id,
+            muzzle: [this.weapon.lastMuzzle.x, this.weapon.lastMuzzle.y, this.weapon.lastMuzzle.z],
+            pts: hits.map((h) => [h.point.x, h.point.y, h.point.z, h.object ? 1 : 0]),
+          })
+        }
+        this.meleeCooldown = Math.max(0, this.meleeCooldown - dt)
+        this.handleMelee()
         if (!this.player.downed) this.handleShopping()
         else this.hud.setPrompt(null)
       } else {

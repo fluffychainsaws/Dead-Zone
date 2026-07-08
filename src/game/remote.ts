@@ -25,9 +25,11 @@ export class RemotePlayer {
   group: THREE.Group
   hp = 100
   down = false
+  crouched = false
 
   private targetPos = new THREE.Vector3()
   private targetYaw = 0
+  private crouchT = 0
 
   constructor(scene: THREE.Scene, name: string) {
     this.group = new THREE.Group()
@@ -55,6 +57,7 @@ export class RemotePlayer {
     this.targetYaw = s[2]
     this.hp = s[3]
     this.down = s[4] === 1
+    this.crouched = s[6] === 1
     this.group.rotation.z = this.down ? Math.PI / 2 : 0
   }
 
@@ -66,6 +69,8 @@ export class RemotePlayer {
     while (d > Math.PI) d -= Math.PI * 2
     while (d < -Math.PI) d += Math.PI * 2
     this.group.rotation.y += d * k
+    this.crouchT += ((this.crouched && !this.down ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
+    this.group.scale.y = 1 - this.crouchT * 0.28
   }
 
   get pos(): THREE.Vector3 {
@@ -169,6 +174,22 @@ export class RemoteZombieField {
       runner: rz.runner,
       dying: rz.state === 2,
     }))
+  }
+
+  /** Zombie ids within `range` and in the 180° arc in front of (fwdX, fwdZ) — for a client's melee to report to the host. */
+  meleeCandidates(originX: number, originZ: number, fwdX: number, fwdZ: number, range: number): number[] {
+    const ids: number[] = []
+    for (const [id, rz] of this.zombies) {
+      if (rz.state === 2) continue // already dying
+      const dx = rz.group.position.x - originX
+      const dz = rz.group.position.z - originZ
+      const dist = Math.hypot(dx, dz)
+      if (dist > range || dist < 0.001) continue
+      const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ
+      if (dot <= 0) continue
+      ids.push(id)
+    }
+    return ids
   }
 
   randomGroanSource(): { pos: THREE.Vector3; runner: boolean } | null {

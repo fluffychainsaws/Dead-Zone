@@ -48,6 +48,32 @@ export class Horde {
     return damage
   }
 
+  /** Zombies alive within `range` and in the 180° arc in front of (fwdX, fwdZ). */
+  meleeSweep(
+    originX: number,
+    originZ: number,
+    fwdX: number,
+    fwdZ: number,
+    range: number,
+    damage: number,
+    pushDist: number,
+    nav: ZombieNav,
+  ): Array<{ zombie: Zombie; killed: boolean }> {
+    const results: Array<{ zombie: Zombie; killed: boolean }> = []
+    for (const z of this.zombies) {
+      if (!z.alive) continue
+      const dx = z.group.position.x - originX
+      const dz = z.group.position.z - originZ
+      const dist = Math.hypot(dx, dz)
+      if (dist > range || dist < 0.001) continue
+      const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ
+      if (dot <= 0) continue // behind the player — outside the 180° arc
+      const killed = z.meleeHit(damage, dx / dist, dz / dist, pushDist, nav.colliders)
+      results.push({ zombie: z, killed })
+    }
+    return results
+  }
+
   /** Find the zombie owning a hit object (walks up the parent chain). */
   zombieFor(obj: THREE.Object3D): Zombie | null {
     let cur: THREE.Object3D | null = obj

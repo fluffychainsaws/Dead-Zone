@@ -919,6 +919,23 @@ body {
   font-size: 1.2rem;
 }
 
+#btn-crouch {
+  right: calc(env(safe-area-inset-right) + 40px);
+  bottom: calc(env(safe-area-inset-bottom) + 254px);
+  width: 52px;
+  height: 52px;
+  font-size: 1.25rem;
+}
+
+#btn-melee {
+  right: calc(env(safe-area-inset-right) + 132px);
+  bottom: calc(env(safe-area-inset-bottom) + 254px);
+  width: 56px;
+  height: 56px;
+  font-size: 1.3rem;
+  border-color: rgba(224, 32, 32, 0.5);
+}
+
 #btn-interact {
   right: calc(env(safe-area-inset-right) + 140px);
   bottom: calc(env(safe-area-inset-bottom) + 118px);

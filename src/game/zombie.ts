@@ -88,6 +88,20 @@ export class Zombie {
     return false
   }
 
+  /** Light damage + a shove along (dirX, dirZ) — crowd control more than a kill. */
+  meleeHit(amount: number, dirX: number, dirZ: number, pushDist: number, colliders: Collider[]): boolean {
+    const killed = this.damage(amount)
+    if (killed) return true
+    this.group.position.x += dirX * pushDist
+    this.group.position.z += dirZ * pushDist
+    this.resolve(colliders, 'x')
+    this.resolve(colliders, 'z')
+    // stagger: interrupt an attack windup so the shove actually buys space
+    this.attackT = 0
+    if (this.state === 'attacking') this.state = 'chasing'
+    return false
+  }
+
   /** Chases the nearest target; returns an attack that landed this frame, if any. */
   update(
     dt: number,

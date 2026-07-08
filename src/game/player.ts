@@ -4,10 +4,21 @@ import type { Input } from './input'
 
 const RADIUS = 0.42
 const EYE_HEIGHT = 1.68
+const CROUCH_EYE_HEIGHT = 1.05
 const WALK_SPEED = 4.6
 const SPRINT_SPEED = 7.0
+const CROUCH_SPEED = 2.3
 const JUMP_VELOCITY = 7.6 // apex ≈ 1.3m — clears window sills and low props
 const GRAVITY = 22
+
+// Vaulting: a low obstacle directly ahead gets a scripted climb instead of a
+// plain jump, so clearing crates/sills doesn't depend on sprint-jump timing.
+const VAULT_MIN_H = 0.25
+const VAULT_MAX_H = 1.55
+const VAULT_PROBE_DIST = 0.85
+const VAULT_VELOCITY = 5.6
+const VAULT_PUSH_SPEED = 3.4
+const VAULT_TIME = 0.45
 
 export class Player {
   pos = new THREE.Vector3(0, 0, 11) // middle of the cell block
@@ -18,11 +29,16 @@ export class Player {
   alive = true
   downed = false
   grounded = true
+  crouched = false
 
   private velY = 0
   private bobT = 0
   private time = 0
   private lastHitAt = -10
+  private crouchT = 0 // 0 = standing, 1 = fully crouched (smoothed)
+  private vaultT = 0
+  private vaultDirX = 0
+  private vaultDirZ = 0
   private static readonly REGEN_DELAY = 4
   private static readonly REGEN_RATE = 20
 
@@ -58,11 +74,19 @@ export class Player {
     this.pitch = THREE.MathUtils.clamp(this.pitch - look.y, -1.45, 1.45)
     if (this.downed) {
       input.consumeJump()
+      input.consumeCrouch()
       return // can look around while waiting for a revive, not move
     }
 
+    if (input.consumeCrouch()) this.crouched = !this.crouched
+    this.crouchT += ((this.crouched ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
+
     const move = input.moveVec()
-    const speed = input.sprint && move.z > 0.3 ? SPRINT_SPEED : WALK_SPEED
+    const speed = this.crouched
+      ? CROUCH_SPEED
+      : input.sprint && move.z > 0.3
+        ? SPRINT_SPEED
+        : WALK_SPEED
     const sin = Math.sin(this.yaw)
     const cos = Math.cos(this.yaw)
     // forward is -z in camera space
@@ -75,10 +99,30 @@ export class Player {
     this.pos.z += vz * dt
     this.resolve(colliders, 'z')
 
-    // vertical: jump + gravity, landing on the ground or on low colliders
+    // vertical: jump/vault + gravity, landing on the ground or on low colliders
     if (input.consumeJump() && this.grounded) {
-      this.velY = JUMP_VELOCITY
-      this.grounded = false
+      if (this.crouched) {
+        this.crouched = false // stand up instead of jumping
+      } else {
+        const fwdX = -Math.sin(this.yaw)
+        const fwdZ = -Math.cos(this.yaw)
+        if (this.probeVault(colliders, fwdX, fwdZ)) {
+          this.velY = VAULT_VELOCITY
+          this.vaultT = VAULT_TIME
+          this.vaultDirX = fwdX
+          this.vaultDirZ = fwdZ
+        } else {
+          this.velY = JUMP_VELOCITY
+        }
+        this.grounded = false
+      }
+    }
+    if (this.vaultT > 0) {
+      this.vaultT -= dt
+      // scripted carry over the obstacle — deliberately skips resolve() so the
+      // climb doesn't stall against the very ledge it's meant to clear
+      this.pos.x += this.vaultDirX * VAULT_PUSH_SPEED * dt
+      this.pos.z += this.vaultDirZ * VAULT_PUSH_SPEED * dt
     }
     this.velY -= GRAVITY * dt
     this.pos.y += this.velY * dt
@@ -122,6 +166,25 @@ export class Player {
     return (c.height ?? Infinity) > this.pos.y + 0.05
   }
 
+  /** Is there a vaultable (low, non-wall) obstacle directly ahead? */
+  private probeVault(colliders: Collider[], dirX: number, dirZ: number): boolean {
+    const px = this.pos.x + dirX * VAULT_PROBE_DIST
+    const pz = this.pos.z + dirZ * VAULT_PROBE_DIST
+    for (const c of colliders) {
+      const h = c.height
+      if (h === undefined || h < VAULT_MIN_H || h > VAULT_MAX_H) continue
+      if (
+        px > c.minX - RADIUS &&
+        px < c.maxX + RADIUS &&
+        pz > c.minZ - RADIUS &&
+        pz < c.maxZ + RADIUS
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
   private floorHeight(colliders: Collider[]): number {
     let floor = 0
     for (const c of colliders) {
@@ -161,10 +224,11 @@ export class Player {
 
   applyCamera(camera: THREE.PerspectiveCamera) {
     const bob = Math.sin(this.bobT) * 0.035
-    const crouch = this.downed ? -0.9 : 0
+    const downedOffset = this.downed ? -0.9 : 0
+    const crouchOffset = -this.crouchT * (EYE_HEIGHT - CROUCH_EYE_HEIGHT)
     camera.position.set(
       this.pos.x,
-      this.pos.y + EYE_HEIGHT + bob + crouch,
+      this.pos.y + EYE_HEIGHT + bob + downedOffset + crouchOffset,
       this.pos.z,
     )
     camera.rotation.set(0, 0, 0)

@@ -12,6 +12,7 @@ export type PlayerState = [
   hp: number,
   down: 0 | 1,
   y: number,
+  crouch: 0 | 1,
 ]
 export type ZombieState = [
   id: number,
@@ -44,6 +45,21 @@ export type ScoreMsg = {
   head: 0 | 1
 }
 
+/** One pellet's tracer endpoint: [x, y, z, hit] — broadcast so every peer can see everyone's bullets. */
+export type ShotFxMsg = {
+  wid: string
+  muzzle: [number, number, number]
+  pts: Array<[number, number, number, 0 | 1]>
+}
+
+export type MeleeMsg = {
+  ids: number[]
+  px: number
+  pz: number
+  dx: number
+  dz: number
+}
+
 export function makeGameCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
   let code = ''
@@ -63,6 +79,8 @@ export class NetRoom {
   private revive
   private over
   private door
+  private fx
+  private melee
 
   constructor(code: string, roomPrefix = 'game') {
     this.code = code
@@ -75,6 +93,22 @@ export class NetRoom {
     this.revive = this.room.makeAction<string>('revive')
     this.over = this.room.makeAction<null>('over')
     this.door = this.room.makeAction<number>('door')
+    this.fx = this.room.makeAction<ShotFxMsg>('fx')
+    this.melee = this.room.makeAction<MeleeMsg>('melee')
+  }
+
+  sendFx(s: ShotFxMsg) {
+    void this.fx.send(s)
+  }
+  onFx(cb: (s: ShotFxMsg, from: string) => void) {
+    this.fx.onMessage = (s, ctx) => cb(s, ctx.peerId)
+  }
+
+  sendMelee(s: MeleeMsg) {
+    void this.melee.send(s)
+  }
+  onMelee(cb: (s: MeleeMsg, from: string) => void) {
+    this.melee.onMessage = (s, ctx) => cb(s, ctx.peerId)
   }
 
   sendDoor(id: number) {

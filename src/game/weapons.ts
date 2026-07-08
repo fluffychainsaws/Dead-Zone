@@ -191,10 +191,13 @@ export class WeaponSystem {
   activeIdx = 0
   reloading = false
   events: WeaponEvents = { fired: false, dryFired: false, reloadStarted: false }
+  /** Muzzle world position from the most recent shot — for broadcasting shot fx to peers. */
+  lastMuzzle = new THREE.Vector3()
 
   private cooldown = 0
   private reloadT = 0
   private kick = 0
+  private meleeT = 0
   private raycaster = new THREE.Raycaster()
   private camera: THREE.PerspectiveCamera
   private visible = false
@@ -293,6 +296,11 @@ export class WeaponSystem {
     this.syncVisibility()
   }
 
+  /** Kicks off the gun-bash melee lunge animation (called once per swing). */
+  triggerMelee() {
+    this.meleeT = 0.25
+  }
+
   setVisible(v: boolean) {
     this.visible = v
     this.syncVisibility()
@@ -323,6 +331,7 @@ export class WeaponSystem {
     const w = this.active
     this.cooldown = Math.max(0, this.cooldown - dt)
     this.kick = Math.max(0, this.kick - dt * 6)
+    this.meleeT = Math.max(0, this.meleeT - dt)
 
     if (this.reloading) {
       this.reloadT -= dt
@@ -364,6 +373,7 @@ export class WeaponSystem {
     const hits: ShotHit[] = []
     const muzzle = new THREE.Vector3()
     w.viewmodel.children[0].getWorldPosition(muzzle)
+    this.lastMuzzle.copy(muzzle)
     effects.muzzleFlash(muzzle)
 
     for (let p = 0; p < w.def.pellets; p++) {
@@ -402,8 +412,14 @@ export class WeaponSystem {
 
   private applyViewmodelMotion() {
     const vm = this.active.viewmodel
-    vm.position.set(0.28, -0.26 - this.kick * 0.01, -0.55 + this.kick * 0.06)
-    vm.rotation.x = this.kick * 0.09
+    // gun-bash melee: a quick forward-and-down thrust, independent of firing kick
+    const meleeK = this.meleeT > 0 ? Math.sin((1 - this.meleeT / 0.25) * Math.PI) : 0
+    vm.position.set(
+      0.28,
+      -0.26 - this.kick * 0.01 - meleeK * 0.05,
+      -0.55 + this.kick * 0.06 - meleeK * 0.35,
+    )
+    vm.rotation.x = this.kick * 0.09 - meleeK * 0.5
   }
 }
 
