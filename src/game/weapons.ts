@@ -69,6 +69,45 @@ export const WEAPONS: Record<string, WeaponDef> = {
     auto: true,
     pellets: 1,
   },
+  magnum: {
+    id: 'magnum',
+    name: 'WARDEN .44',
+    damage: 90,
+    headshotMult: 3.5,
+    rpm: 150,
+    magSize: 6,
+    maxReserve: 60,
+    reloadTime: 2.0,
+    spread: 0.005,
+    auto: false,
+    pellets: 1,
+  },
+  liberator: {
+    id: 'liberator',
+    name: 'LIBERATOR',
+    damage: 45,
+    headshotMult: 2.6,
+    rpm: 480,
+    magSize: 20,
+    maxReserve: 160,
+    reloadTime: 2.2,
+    spread: 0.02,
+    auto: true,
+    pellets: 1,
+  },
+  hellfire: {
+    id: 'hellfire',
+    name: 'HELLFIRE',
+    damage: 14,
+    headshotMult: 2,
+    rpm: 180,
+    magSize: 8,
+    maxReserve: 64,
+    reloadTime: 2.6,
+    spread: 0.08,
+    auto: true,
+    pellets: 8,
+  },
 }
 
 export interface ShotHit {
@@ -327,6 +366,46 @@ export function buildViewmodel(defId: string): THREE.Group {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), grip)
     handle.position.set(0, -0.1, 0.12)
     g.add(handle)
+  } else if (defId === 'magnum') {
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.34), dark)
+    barrel.position.set(0, 0.03, -0.18)
+    g.add(barrel)
+    const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.09), dark)
+    cylinder.rotation.z = Math.PI / 2
+    cylinder.rotation.y = Math.PI / 2
+    cylinder.position.set(0, 0, 0.0)
+    g.add(cylinder)
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), wood)
+    handle.position.set(0, -0.1, 0.07)
+    handle.rotation.x = 0.3
+    g.add(handle)
+  } else if (defId === 'liberator') {
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.62), dark)
+    barrel.position.set(0, 0.02, -0.4)
+    g.add(barrel)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.34), dark)
+    g.add(body)
+    const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.08), dark)
+    magazine.position.set(0, -0.14, -0.08)
+    g.add(magazine)
+    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.11, 0.2), wood)
+    butt.position.set(0, -0.03, 0.26)
+    g.add(butt)
+  } else if (defId === 'hellfire') {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.5), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.04, -0.3)
+    g.add(barrel)
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.07), dark)
+    drum.rotation.z = Math.PI / 2
+    drum.rotation.y = Math.PI / 2
+    drum.position.set(0, -0.08, -0.05)
+    g.add(drum)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.1, 0.32), dark)
+    g.add(body)
+    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.11, 0.18), wood)
+    butt.position.set(0, -0.03, 0.24)
+    g.add(butt)
   } else {
     // pistol
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.3), dark)

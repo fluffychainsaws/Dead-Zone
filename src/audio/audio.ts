@@ -265,6 +265,18 @@ export class AudioEngine {
         this.noiseHit({ decay: 0.4, freq: 700, gain: 1.0 })
         this.tone({ from: 110, to: 35, dur: 0.28, gain: 0.9 })
         break
+      case 'hellfire':
+        this.noiseHit({ decay: 0.3, freq: 900, gain: 1.0 })
+        this.tone({ from: 120, to: 40, dur: 0.2, gain: 0.85 })
+        break
+      case 'magnum':
+        this.noiseHit({ decay: 0.24, freq: 1600, gain: 1.0 })
+        this.tone({ from: 170, to: 38, dur: 0.2, gain: 0.9 })
+        break
+      case 'liberator':
+        this.noiseHit({ decay: 0.11, freq: 2100, gain: 0.85 })
+        this.tone({ from: 145, to: 50, dur: 0.1, gain: 0.6 })
+        break
       case 'garand':
         this.noiseHit({ decay: 0.17, freq: 2400, gain: 0.9 })
         this.tone({ from: 150, to: 45, dur: 0.14, gain: 0.7 })
