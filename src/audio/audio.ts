@@ -413,6 +413,25 @@ export class AudioEngine {
     this.noiseHit({ decay: 0.2, freq: 300, gain: 0.5 })
   }
 
+  /** A Midget Zombie launching its jump. */
+  midgetScreech() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    this.tone({ at: t, from: 900, to: 1600, dur: 0.18, gain: 0.45, type: 'sawtooth' })
+    this.tone({ at: t, from: 1300, to: 2200, dur: 0.14, gain: 0.3, type: 'square' })
+    this.noiseHit({ at: t, decay: 0.1, freq: 3000, filterType: 'highpass', gain: 0.25 })
+  }
+
+  /** The startled moment a Midget Zombie lands and latches on. */
+  midgetLatch() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    this.tone({ at: t, from: 1800, to: 300, dur: 0.22, gain: 0.5, type: 'sawtooth' })
+    this.noiseHit({ at: t, decay: 0.15, freq: 1200, gain: 0.5 })
+  }
+
   boxTick() {
     this.tone({ from: 500 + Math.random() * 250, dur: 0.045, gain: 0.16, type: 'square' })
   }

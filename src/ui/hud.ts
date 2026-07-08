@@ -14,6 +14,7 @@ export class Hud {
   private weaponEl: HTMLElement
   private crosshairEl: HTMLElement
   private scopeEl: HTMLElement
+  private midgetEl: HTMLElement
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private hitTimer: ReturnType<typeof setTimeout> | null = null
   // last-written values — these setters run every frame, the DOM should not
@@ -28,6 +29,10 @@ export class Hud {
       <div id="vignette"></div>
       <div id="crosshair"></div>
       <div id="scope-overlay"><div class="lens"><div class="reticle"></div></div></div>
+      <div id="midget-overlay">
+        <div class="claws"></div>
+        <div class="midget-prompt">MASH MELEE TO THROW IT OFF!</div>
+      </div>
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
       <div id="room-info"></div>
       <button id="pause-btn">☰</button>
@@ -62,6 +67,7 @@ export class Hud {
     this.weaponEl = this.root.querySelector('#weapon-name')!
     this.crosshairEl = this.root.querySelector('#crosshair')!
     this.scopeEl = this.root.querySelector('#scope-overlay')!
+    this.midgetEl = this.root.querySelector('#midget-overlay')!
     this.root.querySelector('#pause-btn')!.addEventListener('click', () => this.onPause?.())
   }
 
@@ -79,12 +85,19 @@ export class Hud {
   }
 
   private scopeActive = false
+  private midgetActive = false
 
   setScopeOverlay(active: boolean) {
     if (active === this.scopeActive) return
     this.scopeActive = active
     this.scopeEl.classList.toggle('active', active)
     this.crosshairEl.style.visibility = active ? 'hidden' : 'visible'
+  }
+
+  setMidgetOverlay(active: boolean) {
+    if (active === this.midgetActive) return
+    this.midgetActive = active
+    this.midgetEl.classList.toggle('active', active)
   }
 
   setWeaponName(name: string) {

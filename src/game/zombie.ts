@@ -7,11 +7,29 @@ const ATTACK_WINDUP = 0.45
 const ATTACK_COOLDOWN = 1.0
 const ATTACK_DAMAGE = 14
 
+// Midget Zombie: tiny, fragile, always dies to a headshot — but leaps from
+// medium range with a predicted (not tracking) trajectory and latches onto
+// the target's head, blocking their view until pried off.
+const MIDGET_SCALE = 0.25
+const MIDGET_JUMP_MIN_RANGE = 3.0
+const MIDGET_JUMP_MAX_RANGE = 9.0
+const MIDGET_JUMP_DURATION = 0.55
+const MIDGET_JUMP_ARC = 1.3
+const MIDGET_CONTACT_RADIUS = 1.15
+const MIDGET_JUMP_COOLDOWN = 3.5
+const MIDGET_LATCH_TICK = 0.5
+const MIDGET_LATCH_DAMAGE = 6
+const MIDGET_PRY_NEEDED = 2
+const MIDGET_PRY_KNOCKBACK_DAMAGE = 15
+
 export type ZombieState = 'chasing' | 'attacking' | 'dying'
+export type MidgetPhase = 'ground' | 'jumping' | 'latched'
 
 export interface TargetInfo {
   id: string
   pos: THREE.Vector3
+  /** Current velocity — used only at the instant a midget jumps, never mid-flight. */
+  vel?: { x: number; z: number }
 }
 
 export interface AttackResult {
@@ -44,8 +62,15 @@ export class Zombie {
   maxHp: number
   speed: number
   runner: boolean
+  isMidget: boolean
   state: ZombieState = 'chasing'
   dead = false // fully finished (despawn)
+
+  // midget-only state
+  midgetPhase: MidgetPhase = 'ground'
+  latchedTargetId: string | null = null
+  /** True for the one frame a jump launches — Game.ts checks this to trigger a sound. */
+  justJumped = false
 
   private parts: Parts
   private animT = Math.random() * 10
@@ -58,15 +83,41 @@ export class Zombie {
   private sideSign = 1
   private hop = 0 // vault height, eased
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, hp: number, runner: boolean) {
+  // midget jump/latch internals
+  private jumpCooldown = 0.6 + Math.random() * 1.5 // don't jump the instant it spawns
+  private jumpT = 0
+  private jumpStartX = 0
+  private jumpStartZ = 0
+  private jumpTargetX = 0
+  private jumpTargetZ = 0
+  private latchDamageT = 0
+  private pryCount = 0
+
+  constructor(
+    scene: THREE.Scene,
+    pos: THREE.Vector3,
+    hp: number,
+    runner: boolean,
+    isMidget = false,
+    wave = 1,
+  ) {
     this.scene = scene
     this.hp = hp
     this.maxHp = hp
     this.runner = runner
-    this.speed = runner ? 4.2 + Math.random() * 0.8 : 1.5 + Math.random() * 0.7
+    this.isMidget = isMidget
+    if (isMidget) {
+      this.speed = 2.4 + Math.random() * 0.5 // ground-scuttle speed between jumps
+    } else if (runner) {
+      // ramps in slowly after wave 5, hard-capped — never an unbeatable sprint
+      this.speed = Math.min(3.6 + Math.max(0, wave - 5) * 0.12, 5.2) + Math.random() * 0.3
+    } else {
+      this.speed = 1.5 + Math.random() * 0.7
+    }
     const { group, parts } = buildZombieMesh(runner)
     this.group = group
     this.parts = parts
+    if (isMidget) group.scale.setScalar(MIDGET_SCALE)
     group.position.copy(pos)
     group.userData.zombie = this
     scene.add(group)
@@ -83,9 +134,16 @@ export class Zombie {
     if (this.hp <= 0) {
       this.state = 'dying'
       this.deathT = 0
+      if (this.midgetPhase === 'latched') this.detach()
       return true
     }
     return false
+  }
+
+  /** Bullet hits go through here so a midget headshot can be an automatic kill. */
+  applyBulletDamage(amount: number, headshot: boolean): boolean {
+    if (this.isMidget && headshot) return this.damage(this.hp + 1)
+    return this.damage(amount)
   }
 
   /** Light damage + a shove along (dirX, dirZ) — crowd control more than a kill. */
@@ -102,6 +160,26 @@ export class Zombie {
     return false
   }
 
+  /** A pry attempt against a latched midget. Returns true once it's thrown off. */
+  registerPry(): boolean {
+    if (this.midgetPhase !== 'latched') return false
+    this.pryCount++
+    if (this.pryCount >= MIDGET_PRY_NEEDED) {
+      this.damage(MIDGET_PRY_KNOCKBACK_DAMAGE)
+      if (this.alive) this.detach()
+      return true
+    }
+    return false
+  }
+
+  private detach() {
+    this.midgetPhase = 'ground'
+    this.latchedTargetId = null
+    this.pryCount = 0
+    this.jumpCooldown = MIDGET_JUMP_COOLDOWN
+    this.state = 'chasing'
+  }
+
   /** Chases the nearest target; returns an attack that landed this frame, if any. */
   update(
     dt: number,
@@ -109,6 +187,7 @@ export class Zombie {
     nav: ZombieNav,
     others: Zombie[],
   ): AttackResult | null {
+    this.justJumped = false
     if (this.state === 'dying') {
       this.deathT += dt
       // fall over, then sink
@@ -134,10 +213,27 @@ export class Zombie {
         target = t
       }
     }
+
+    if (this.isMidget) {
+      if (this.midgetPhase === 'latched') return this.updateLatched(dt, targets)
+      if (this.midgetPhase === 'jumping') return this.updateJumping(dt, targets)
+    }
+
     if (!target) return null
     const dx = target.pos.x - pos.x
     const dz = target.pos.z - pos.z
     this.group.rotation.y = Math.atan2(dx, dz)
+
+    if (
+      this.isMidget &&
+      this.jumpCooldown <= 0 &&
+      dist >= MIDGET_JUMP_MIN_RANGE &&
+      dist <= MIDGET_JUMP_MAX_RANGE
+    ) {
+      this.startJump(target)
+      return null
+    }
+    if (this.isMidget) this.jumpCooldown = Math.max(0, this.jumpCooldown - dt)
 
     let dealt = 0
     if (dist < ATTACK_RANGE || this.state === 'attacking') {
@@ -231,6 +327,71 @@ export class Zombie {
       this.parts.head.rotation.z = Math.sin(this.animT * 1.7) * 0.12
     }
     return dealt > 0 ? { targetId: target.id, damage: dealt } : null
+  }
+
+  private startJump(target: TargetInfo) {
+    this.justJumped = true
+    this.midgetPhase = 'jumping'
+    this.state = 'attacking' // borrow this state so Horde/host treat it as "engaged"
+    this.jumpT = 0
+    this.jumpStartX = this.group.position.x
+    this.jumpStartZ = this.group.position.z
+    const vx = target.vel?.x ?? 0
+    const vz = target.vel?.z ?? 0
+    // predicted once, at launch — no mid-air correction
+    this.jumpTargetX = target.pos.x + vx * MIDGET_JUMP_DURATION
+    this.jumpTargetZ = target.pos.z + vz * MIDGET_JUMP_DURATION
+  }
+
+  private updateJumping(dt: number, targets: TargetInfo[]): AttackResult | null {
+    this.jumpT += dt
+    const t = Math.min(1, this.jumpT / MIDGET_JUMP_DURATION)
+    const pos = this.group.position
+    pos.x = this.jumpStartX + (this.jumpTargetX - this.jumpStartX) * t
+    pos.z = this.jumpStartZ + (this.jumpTargetZ - this.jumpStartZ) * t
+    pos.y = Math.sin(Math.PI * t) * MIDGET_JUMP_ARC
+    this.group.rotation.x = t * Math.PI * 2.4 // tumbling through the air
+    const dx = this.jumpTargetX - this.jumpStartX
+    const dz = this.jumpTargetZ - this.jumpStartZ
+    if (Math.hypot(dx, dz) > 0.01) this.group.rotation.y = Math.atan2(dx, dz)
+
+    if (t < 1) return null
+    this.group.rotation.x = 0
+    pos.y = 0
+    // contact check uses the target's REAL current position — no tracking mid-flight,
+    // so a player who juked will make it miss
+    let best: TargetInfo | null = null
+    let bestD = Infinity
+    for (const tt of targets) {
+      const d = Math.hypot(tt.pos.x - pos.x, tt.pos.z - pos.z)
+      if (d < bestD) {
+        bestD = d
+        best = tt
+      }
+    }
+    if (best && bestD <= MIDGET_CONTACT_RADIUS) {
+      this.midgetPhase = 'latched'
+      this.latchedTargetId = best.id
+      this.pryCount = 0
+      this.latchDamageT = MIDGET_LATCH_TICK
+      this.state = 'attacking'
+    } else {
+      this.midgetPhase = 'ground'
+      this.jumpCooldown = MIDGET_JUMP_COOLDOWN
+      this.state = 'chasing'
+    }
+    return null
+  }
+
+  private updateLatched(dt: number, targets: TargetInfo[]): AttackResult | null {
+    const host = targets.find((t) => t.id === this.latchedTargetId)
+    if (host) {
+      this.group.position.set(host.pos.x, 1.3, host.pos.z)
+    }
+    this.latchDamageT -= dt
+    if (this.latchDamageT > 0) return null
+    this.latchDamageT = MIDGET_LATCH_TICK
+    return this.latchedTargetId ? { targetId: this.latchedTargetId, damage: MIDGET_LATCH_DAMAGE } : null
   }
 
   isHeadPart(obj: THREE.Object3D): boolean {

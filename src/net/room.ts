@@ -21,7 +21,11 @@ export type ZombieState = [
   ry: number,
   state: 0 | 1 | 2, // 0 chasing, 1 attacking, 2 dying
   runner: 0 | 1,
+  midget: 0 | 1,
 ]
+
+/** A midget currently latched onto someone's head: [zombie id, target id]. */
+export type MidgetLatch = [number, string]
 
 export type GameState = {
   w: number // wave
@@ -29,6 +33,7 @@ export type GameState = {
   z: ZombieState[]
   p: Record<string, PlayerState>
   d: number[] // opened door ids
+  mg: MidgetLatch[]
 }
 
 export type ShotMsg = {
@@ -60,6 +65,11 @@ export type MeleeMsg = {
   dz: number
 }
 
+/** A pry attempt against the Midget Zombie latched onto the sender's head. */
+export type PryMsg = {
+  zid: number
+}
+
 export function makeGameCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
   let code = ''
@@ -81,6 +91,7 @@ export class NetRoom {
   private door
   private fx
   private melee
+  private pry
 
   constructor(code: string, roomPrefix = 'game') {
     this.code = code
@@ -95,6 +106,14 @@ export class NetRoom {
     this.door = this.room.makeAction<number>('door')
     this.fx = this.room.makeAction<ShotFxMsg>('fx')
     this.melee = this.room.makeAction<MeleeMsg>('melee')
+    this.pry = this.room.makeAction<PryMsg>('pry')
+  }
+
+  sendPry(s: PryMsg) {
+    void this.pry.send(s)
+  }
+  onPry(cb: (s: PryMsg, from: string) => void) {
+    this.pry.onMessage = (s, ctx) => cb(s, ctx.peerId)
   }
 
   sendFx(s: ShotFxMsg) {

@@ -6,7 +6,9 @@ export type WavePhase = 'idle' | 'intermission' | 'active'
 const INTERMISSION_TIME = 7
 const FIRST_WAVE_DELAY = 3
 const SPAWN_INTERVAL = 1.1
-const MAX_ALIVE = 22
+const BASE_MAX_ALIVE = 22
+const RUNNER_START_WAVE = 6 // no runners at all before this
+const MIDGET_START_WAVE = 4
 
 export interface WaveEvents {
   onWaveStart?: (wave: number) => void
@@ -31,8 +33,8 @@ export class Horde {
     return this.zombies.filter((z) => z.alive).map((z) => z.group)
   }
 
-  spawn(pos: THREE.Vector3, hp: number, runner: boolean): Zombie {
-    const z = new Zombie(this.scene, pos, hp, runner)
+  spawn(pos: THREE.Vector3, hp: number, runner: boolean, isMidget = false, wave = 1): Zombie {
+    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave)
     this.zombies.push(z)
     return z
   }
@@ -94,6 +96,8 @@ export class WaveSystem {
   wave = 0
   phase: WavePhase = 'idle'
   kills = 0
+  /** 1.0 for solo; scales up with player count so co-op stays challenging. */
+  playerMultiplier = 1
 
   private timer = 0
   private pendingSpawns = 0
@@ -106,6 +110,15 @@ export class WaveSystem {
     this.horde = horde
     this.getSpawns = getSpawns
     this.events = events
+  }
+
+  /** Call whenever the player count changes (join/leave) — solo stays at 1.0. */
+  setPlayerCount(count: number) {
+    this.playerMultiplier = 1 + Math.max(0, count - 1) * 0.75
+  }
+
+  get maxAlive(): number {
+    return Math.round(BASE_MAX_ALIVE * this.playerMultiplier)
   }
 
   begin() {
@@ -130,15 +143,23 @@ export class WaveSystem {
   }
 
   zombieCount(wave: number): number {
-    return Math.min(5 + (wave - 1) * 3, 32)
+    const base = Math.min(5 + (wave - 1) * 3, 32)
+    return Math.round(base * this.playerMultiplier)
   }
 
   zombieHp(wave: number): number {
     return Math.round(60 * (1 + 0.17 * (wave - 1)))
   }
 
+  /** No runners at all before wave 6 — then a growing share, capped. */
   runnerChance(wave: number): number {
-    return Math.min(0.05 + wave * 0.05, 0.5)
+    if (wave < RUNNER_START_WAVE) return 0
+    return Math.min((wave - RUNNER_START_WAVE + 1) * 0.08, 0.55)
+  }
+
+  midgetChance(wave: number): number {
+    if (wave < MIDGET_START_WAVE) return 0
+    return Math.min(0.08 + (wave - MIDGET_START_WAVE) * 0.02, 0.22)
   }
 
   update(dt: number) {
@@ -159,7 +180,7 @@ export class WaveSystem {
     // active
     if (this.pendingSpawns > 0) {
       this.spawnTimer -= dt
-      if (this.spawnTimer <= 0 && this.horde.aliveCount < MAX_ALIVE) {
+      if (this.spawnTimer <= 0 && this.horde.aliveCount < this.maxAlive) {
         const spawns = this.getSpawns()
         if (spawns.length === 0) return
         this.spawnTimer = SPAWN_INTERVAL
@@ -170,10 +191,14 @@ export class WaveSystem {
           0,
           (Math.random() - 0.5) * 1.4,
         )
+        const isMidget = Math.random() < this.midgetChance(this.wave)
+        const runner = !isMidget && Math.random() < this.runnerChance(this.wave)
         this.horde.spawn(
           p.clone().add(jitter),
-          this.zombieHp(this.wave),
-          Math.random() < this.runnerChance(this.wave),
+          isMidget ? Math.round(this.zombieHp(this.wave) / 2) : this.zombieHp(this.wave),
+          runner,
+          isMidget,
+          this.wave,
         )
       }
     } else if (this.horde.aliveCount === 0) {

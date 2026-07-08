@@ -420,6 +420,86 @@ body {
     10px 0 0 -1px rgba(132, 255, 90, 0.7);
 }
 
+#midget-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  z-index: 23;
+  overflow: hidden;
+  animation: midget-shake 0.18s infinite;
+}
+
+#midget-overlay.active {
+  display: block;
+}
+
+#midget-overlay::before {
+  /* the creature's body — a dark mass clinging over most of the lower/side view */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -12%;
+  width: 78vmin;
+  height: 60vmin;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse at 50% 30%,
+    rgba(30, 46, 24, 0.96) 0%,
+    rgba(20, 32, 16, 0.9) 45%,
+    rgba(10, 16, 8, 0.4) 75%,
+    transparent 100%
+  );
+  border-radius: 50%;
+}
+
+#midget-overlay .claws {
+  position: absolute;
+  inset: 0;
+}
+
+#midget-overlay .claws::before,
+#midget-overlay .claws::after {
+  content: '';
+  position: absolute;
+  bottom: 6%;
+  width: 22vmin;
+  height: 34vmin;
+  background: rgba(24, 36, 18, 0.92);
+  clip-path: polygon(50% 0%, 80% 20%, 100% 60%, 70% 100%, 30% 100%, 0% 60%, 20% 20%);
+}
+
+#midget-overlay .claws::before {
+  left: 4%;
+  transform: rotate(-12deg);
+}
+
+#midget-overlay .claws::after {
+  right: 4%;
+  transform: rotate(12deg) scaleX(-1);
+}
+
+#midget-overlay .midget-prompt {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 4vw, 1.6rem);
+  letter-spacing: 0.1em;
+  color: var(--blood-bright);
+  text-shadow: 0 0 12px rgba(224, 32, 32, 0.7), 0 2px 4px #000;
+  white-space: nowrap;
+  text-align: center;
+}
+
+@keyframes midget-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-0.4vmin, 0.3vmin); }
+  50% { transform: translate(0.3vmin, -0.3vmin); }
+  75% { transform: translate(-0.3vmin, -0.2vmin); }
+}
+
 #scope-overlay {
   position: absolute;
   inset: 0;

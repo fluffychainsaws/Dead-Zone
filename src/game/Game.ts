@@ -14,9 +14,10 @@ import {
   type GameState,
   type PlayerState,
   type ShotFxMsg,
+  type MidgetLatch,
 } from '../net/room'
 import { Lobby, shortName } from '../net/lobby'
-import type { TargetInfo } from './zombie'
+import type { TargetInfo, Zombie } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
 import { PauseMenu } from '../ui/pause'
@@ -68,6 +69,13 @@ export class Game {
   private downNotified = new Set<string>()
   private mysteryBox!: MysteryBox
   private meleeCooldown = 0
+
+  // --- midget zombie latch state ---
+  private lastPlayerPos = new THREE.Vector3()
+  private lastAvatarPos = new Map<string, THREE.Vector3>()
+  private myLatchZombie: Zombie | null = null // solo/host: the real Zombie object latched onto me
+  private myLatchClientZid: number | null = null // client: id of the zombie latched onto me (via wire)
+  private wasLatched = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -152,6 +160,7 @@ export class Game {
 
   startSolo() {
     this.netMode = 'solo'
+    this.waves.setPlayerCount(1)
     this.beginPlaying()
     this.waves.begin()
   }
@@ -161,6 +170,7 @@ export class Game {
     this.net = new NetRoom(code)
     this.bindCommonNet()
     this.bindHostNet()
+    this.waves.setPlayerCount(1)
     this.hud.setRoomInfo(`CODE: ${code}`)
     this.beginPlaying()
     this.waves.begin()
@@ -186,7 +196,7 @@ export class Game {
       this.effects.impact(new THREE.Vector3(...shot.to), 'blood')
       const def = Object.values(this.weaponDefs()).find((d) => d.id === shot.wid)
       const dmg = (def?.damage ?? 30) * (shot.head ? (def?.headshotMult ?? 2) : 1)
-      const killed = z.damage(dmg)
+      const killed = z.applyBulletDamage(dmg, shot.head === 1)
       if (killed) this.waves.registerKill(z, shot.head === 1)
       this.net!.sendScore(
         { amt: POINTS.hit + (killed ? (shot.head ? POINTS.headshotKill : POINTS.kill) : 0), kill: killed ? 1 : 0, head: shot.head },
@@ -214,6 +224,10 @@ export class Game {
         }
       }
       if (amt > 0) this.net!.sendScore({ amt, kill: anyKill ? 1 : 0, head: 0 }, from)
+    })
+    this.net.onPry((msg) => {
+      const z = this.horde.zombies.find((x) => x.id === msg.zid)
+      z?.registerPry()
     })
   }
 
@@ -272,13 +286,16 @@ export class Game {
       this.hud.banner('SURVIVOR JOINED', 1800)
       this.ensureAvatar(id)
       this.updateRoomCount()
+      if (this.netMode !== 'client') this.waves.setPlayerCount((this.net?.peers().length ?? 0) + 1)
     })
     this.net.onPeerLeave((id) => {
       const avatar = this.remotePlayers.get(id)
       if (avatar) this.scene.remove(avatar.group)
       this.remotePlayers.delete(id)
       this.peerStates.delete(id)
+      this.lastAvatarPos.delete(id)
       this.updateRoomCount()
+      if (this.netMode !== 'client') this.waves.setPlayerCount((this.net?.peers().length ?? 0) + 1)
       if (this.netMode === 'client' && id === this.hostId) {
         this.beginHostMigration()
       } else {
@@ -326,9 +343,11 @@ export class Game {
     // rebuild the horde from the last positions we saw as a client
     this.horde.reset()
     const wave = Math.max(this.clientWave, 1)
+    this.waves.setPlayerCount((this.net?.peers().length ?? 0) + 1)
     for (const z of this.remoteZombies.snapshot()) {
       if (z.dying) continue // don't resurrect a zombie mid-death animation
-      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), this.waves.zombieHp(wave), z.runner)
+      const hp = z.midget ? Math.round(this.waves.zombieHp(wave) / 2) : this.waves.zombieHp(wave)
+      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), hp, z.runner, z.midget, wave)
     }
     this.remoteZombies.clear()
     this.waves.resumeAt(this.clientWave, this.clientPhase)
@@ -352,6 +371,7 @@ export class Game {
     this.hud.show()
     this.hud.onPause = () => this.openPause()
     this.hud.setPoints(this.economy.points)
+    this.lastPlayerPos.copy(this.player.pos)
     this.input.requestLock()
     audio.unlock()
     audio.startMusic()
@@ -406,6 +426,8 @@ export class Game {
       if (!this.arena.doors[id]?.open) this.openDoorEverywhere(id, false)
     }
     this.remoteZombies.applyState(s.z)
+    const myLatch = (s.mg ?? []).find(([, targetId]) => targetId === selfId)
+    this.myLatchClientZid = myLatch ? myLatch[0] : null
     for (const [pid, ps] of Object.entries(s.p)) {
       if (pid === selfId) continue
       // host relays every player's state (including its own under hostId)
@@ -716,6 +738,14 @@ export class Game {
       return
     }
     // host: broadcast the world
+    const latches: MidgetLatch[] = []
+    for (const z of this.horde.zombies) {
+      if (z.isMidget && z.midgetPhase === 'latched' && z.latchedTargetId) {
+        // 'self' means the host's own player — translate to the host's real peer id
+        // so remote clients (who only know peer ids) can recognize their own target
+        latches.push([z.id, z.latchedTargetId === 'self' ? selfId : z.latchedTargetId])
+      }
+    }
     const state: GameState = {
       w: this.waves.wave,
       ph: this.waves.phase,
@@ -728,9 +758,11 @@ export class Game {
           Number(z.group.rotation.y.toFixed(2)),
           z.state === 'dying' ? 2 : z.state === 'attacking' ? 1 : 0,
           z.runner ? 1 : 0,
+          z.isMidget ? 1 : 0,
         ]),
       p: { ...Object.fromEntries(this.peerStates), host: self },
       d: this.arena.openDoorIds(),
+      mg: latches,
     }
     this.net.sendState(state)
   }
@@ -790,7 +822,33 @@ export class Game {
         else this.weapon.exitDowned()
       }
 
-      if (!this.paused) {
+      // find whether a Midget Zombie is latched onto ME specifically (host/solo: real
+      // object; client: learned from the host's broadcast) — blocks fire/shop, not movement
+      if (this.netMode === 'client') {
+        this.myLatchZombie = null
+      } else {
+        this.myLatchZombie =
+          this.horde.zombies.find(
+            (z) => z.isMidget && z.midgetPhase === 'latched' && z.latchedTargetId === 'self',
+          ) ?? null
+      }
+      const isLatched = this.myLatchZombie !== null || this.myLatchClientZid !== null
+      this.hud.setMidgetOverlay(isLatched)
+      if (isLatched && !this.wasLatched) audio.midgetLatch()
+      this.wasLatched = isLatched
+
+      if (!this.paused && isLatched) {
+        // both hands are busy prying it off — no shooting, no shopping, melee = pry
+        this.hud.setPrompt(null)
+        if (this.input.consumeMelee()) {
+          audio.melee()
+          if (this.netMode === 'client') {
+            if (this.myLatchClientZid !== null) this.net?.sendPry({ zid: this.myLatchClientZid })
+          } else if (this.myLatchZombie?.registerPry()) {
+            audio.purchase() // distinct "thrown off" cue
+          }
+        }
+      } else if (!this.paused) {
         const zombieTargets =
           this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
         const targets = [...this.arena.colliderMeshes, ...zombieTargets]
@@ -822,7 +880,7 @@ export class Game {
               this.weapon.def.damage * (headshot ? this.weapon.def.headshotMult : 1)
             this.earn(POINTS.hit)
             audio.zombieHit()
-            if (zombie.damage(dmg)) {
+            if (zombie.applyBulletDamage(dmg, headshot)) {
               this.waves.registerKill(zombie, headshot)
               this.earn(headshot ? POINTS.headshotKill : POINTS.kill)
               this.hud.hitmarker(headshot ? 'headshot' : 'kill')
@@ -854,16 +912,34 @@ export class Game {
       if (this.netMode === 'client') {
         this.remoteZombies.update(dt)
       } else {
+        // velocities are only ever sampled at the instant a midget jumps — safe to
+        // recompute every frame from simple position deltas
+        const selfVel =
+          dt > 0
+            ? {
+                x: (this.player.pos.x - this.lastPlayerPos.x) / dt,
+                z: (this.player.pos.z - this.lastPlayerPos.z) / dt,
+              }
+            : { x: 0, z: 0 }
+        this.lastPlayerPos.copy(this.player.pos)
+
         const targetInfos: TargetInfo[] = []
         if (!this.player.downed && this.player.hp > 0)
-          targetInfos.push({ id: 'self', pos: this.player.pos })
+          targetInfos.push({ id: 'self', pos: this.player.pos, vel: selfVel })
         for (const [id, avatar] of this.remotePlayers) {
-          if (!avatar.down && avatar.hp > 0) targetInfos.push({ id, pos: avatar.pos })
+          if (!avatar.down && avatar.hp > 0) {
+            const last = this.lastAvatarPos.get(id) ?? avatar.pos.clone()
+            const vel =
+              dt > 0 ? { x: (avatar.pos.x - last.x) / dt, z: (avatar.pos.z - last.z) / dt } : { x: 0, z: 0 }
+            this.lastAvatarPos.set(id, avatar.pos.clone())
+            targetInfos.push({ id, pos: avatar.pos, vel })
+          }
         }
         // nobody left standing? zombies idle on the last known spot
         if (targetInfos.length === 0)
           targetInfos.push({ id: 'nobody', pos: this.player.pos })
         const damage = this.horde.update(dt, targetInfos, this.zombieNav())
+        for (const z of this.horde.zombies) if (z.justJumped) audio.midgetScreech()
         if (damage['self']) {
           this.player.takeDamage(damage['self'])
           audio.playerHurt()
