@@ -30,11 +30,12 @@ const MELEE_RANGE = 2.4
 const MELEE_DAMAGE = 25
 const MELEE_PUSH = 2.0
 const MELEE_COOLDOWN = 0.7
+const BASE_FOV = 72
 
 export class Game {
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
-  private camera = new THREE.PerspectiveCamera(72, 1, 0.08, 200)
+  private camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.08, 200)
   private arena: Arena
   private player = new Player()
   private input: Input
@@ -360,6 +361,15 @@ export class Game {
   private weaponDefs() {
     // avoids importing WEAPONS at use sites; single source in weapons.ts
     return this.weapon.allDefs()
+  }
+
+  /** Smoothly zooms the camera FOV for ADS, and shows the scope overlay for true-magnification optics. */
+  private updateAimZoom(dt: number) {
+    const ads = this.weapon.def.ads
+    const targetFov = this.weapon.aiming && ads ? BASE_FOV * ads.zoom : BASE_FOV
+    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10)
+    this.camera.updateProjectionMatrix()
+    this.hud.setScopeOverlay(this.weapon.aiming && !!ads?.scope)
   }
 
   private zombieNav() {
@@ -785,6 +795,7 @@ export class Game {
           this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
         const targets = [...this.arena.colliderMeshes, ...zombieTargets]
         const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
+        this.updateAimZoom(dt)
         if (this.weapon.events.fired) audio.gunshot(weaponKind(this.weapon.def.id))
         if (this.weapon.events.dryFired) audio.dryFire()
         if (this.weapon.events.reloadStarted) audio.reload()

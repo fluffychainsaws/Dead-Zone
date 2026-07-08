@@ -12,6 +12,8 @@ export class Hud {
   private promptEl: HTMLElement
   private hitmarkerEl: HTMLElement
   private weaponEl: HTMLElement
+  private crosshairEl: HTMLElement
+  private scopeEl: HTMLElement
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private hitTimer: ReturnType<typeof setTimeout> | null = null
   // last-written values — these setters run every frame, the DOM should not
@@ -25,6 +27,7 @@ export class Hud {
     this.root.innerHTML = `
       <div id="vignette"></div>
       <div id="crosshair"></div>
+      <div id="scope-overlay"><div class="lens"><div class="reticle"></div></div></div>
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
       <div id="room-info"></div>
       <button id="pause-btn">☰</button>
@@ -37,8 +40,8 @@ export class Hud {
       <div id="ammo">--</div>
       <div id="hint">${
         isTouch
-          ? 'Left: move · Right: aim · Hold FIRE'
-          : 'WASD move · Shift sprint · Space jump/vault · C crouch · V melee · R reload'
+          ? 'Left: move · Right: aim · Hold FIRE · ADS to zoom'
+          : 'WASD move · Shift sprint · Right-click ADS · Space jump/vault · C crouch · V melee · R reload'
       }</div>
       <div id="game-over">
         <h2>YOU DIED</h2>
@@ -57,6 +60,8 @@ export class Hud {
     this.promptEl = this.root.querySelector('#prompt')!
     this.hitmarkerEl = this.root.querySelector('#hitmarker')!
     this.weaponEl = this.root.querySelector('#weapon-name')!
+    this.crosshairEl = this.root.querySelector('#crosshair')!
+    this.scopeEl = this.root.querySelector('#scope-overlay')!
     this.root.querySelector('#pause-btn')!.addEventListener('click', () => this.onPause?.())
   }
 
@@ -71,6 +76,15 @@ export class Hud {
     if (amount < 0) el.classList.add('spend')
     this.pointsEl.appendChild(el)
     setTimeout(() => el.remove(), 900)
+  }
+
+  private scopeActive = false
+
+  setScopeOverlay(active: boolean) {
+    if (active === this.scopeActive) return
+    this.scopeActive = active
+    this.scopeEl.classList.toggle('active', active)
+    this.crosshairEl.style.visibility = active ? 'hidden' : 'visible'
   }
 
   setWeaponName(name: string) {

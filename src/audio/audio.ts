@@ -314,6 +314,43 @@ export class AudioEngine {
         this.noiseHit({ decay: 0.14, freq: 1000, gain: 0.9 })
         this.tone({ from: 135, to: 42, dur: 0.12, gain: 0.65 })
         break
+      case 'm4':
+        // crisp, punchy carbine crack
+        this.noiseHit({ decay: 0.1, freq: 2000, gain: 0.85 })
+        this.tone({ from: 150, to: 48, dur: 0.09, gain: 0.6 })
+        break
+      case 'mp5':
+        // tight, quick, slightly muffled SMG report
+        this.noiseHit({ decay: 0.09, freq: 1900, gain: 0.75 })
+        this.tone({ from: 150, to: 60, dur: 0.08, gain: 0.5 })
+        break
+      case 'sniper50': {
+        // the biggest boom in the game — sharp crack, then a huge sustained roar
+        this.noiseHit({ decay: 0.05, freq: 4600, filterType: 'highpass', gain: 0.65 })
+        this.noiseHit({ decay: 0.7, freq: 300, gain: 1.0 })
+        this.tone({ from: 50, to: 15, dur: 0.7, gain: 1.0 })
+        break
+      }
+      case 'p90':
+        // high-pitched, very rapid buzz
+        this.noiseHit({ decay: 0.06, freq: 2400, gain: 0.7 })
+        this.tone({ from: 170, to: 65, dur: 0.06, gain: 0.45 })
+        break
+      case 'dualpistols':
+        // sharper and punchier than the single pistol
+        this.noiseHit({ decay: 0.09, freq: 1700, gain: 0.75 })
+        this.tone({ from: 148, to: 55, dur: 0.09, gain: 0.55 })
+        break
+      case 'chainsaw':
+        // gritty revving snarl rather than a gunshot
+        this.noiseHit({ decay: 0.05, freq: 550, filterType: 'bandpass', gain: 0.85 })
+        this.tone({ from: 200, to: 175, dur: 0.05, gain: 0.35, type: 'sawtooth' })
+        break
+      case 'flamethrower':
+        // low roaring whoosh
+        this.noiseHit({ decay: 0.08, freq: 480, filterType: 'bandpass', gain: 0.6 })
+        this.tone({ from: 80, to: 55, dur: 0.08, gain: 0.3, type: 'sawtooth' })
+        break
       default: // pistol
         this.noiseHit({ decay: 0.11, freq: 1500, gain: 0.75 })
         this.tone({ from: 140, to: 50, dur: 0.1, gain: 0.55 })

@@ -420,6 +420,59 @@ body {
     10px 0 0 -1px rgba(132, 255, 90, 0.7);
 }
 
+#scope-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  z-index: 22;
+}
+
+#scope-overlay.active {
+  display: block;
+}
+
+#scope-overlay .lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62vmin;
+  height: 62vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px #000;
+  border: 3px solid rgba(20, 20, 20, 0.9);
+  outline: 1px solid rgba(132, 255, 90, 0.3);
+}
+
+#scope-overlay .reticle {
+  position: absolute;
+  inset: 0;
+}
+
+#scope-overlay .reticle::before,
+#scope-overlay .reticle::after {
+  content: '';
+  position: absolute;
+  background: rgba(132, 255, 90, 0.85);
+}
+
+#scope-overlay .reticle::before {
+  left: 50%;
+  top: 8%;
+  bottom: 8%;
+  width: 1.5px;
+  margin-left: -0.75px;
+}
+
+#scope-overlay .reticle::after {
+  top: 50%;
+  left: 8%;
+  right: 8%;
+  height: 1.5px;
+  margin-top: -0.75px;
+}
+
 #vignette {
   position: absolute;
   inset: 0;
@@ -925,6 +978,14 @@ body {
   width: 52px;
   height: 52px;
   font-size: 1.25rem;
+}
+
+#btn-aim {
+  right: calc(env(safe-area-inset-right) + 40px);
+  bottom: calc(env(safe-area-inset-bottom) + 190px);
+  width: 52px;
+  height: 52px;
+  font-size: 0.85rem;
 }
 
 #btn-melee {

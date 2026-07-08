@@ -5,13 +5,25 @@ import { glowSprite, GLOW_GOLD } from './effects'
 export const BOX_COST = 950
 const BREAK_TIME = 0.45
 
-// Claw choreography — six short scripted phases, each with a fixed duration.
-const PHASES = ['toPile', 'descend', 'grab', 'ascend', 'toChute', 'release', 'falling'] as const
+// Claw choreography — scripted phases, each with a fixed duration. 'choosing' is the
+// suspenseful pause where the claw holds the box still while the prize is decided.
+const PHASES = [
+  'toPile',
+  'descend',
+  'grab',
+  'choosing',
+  'ascend',
+  'toChute',
+  'release',
+  'falling',
+] as const
 type Phase = (typeof PHASES)[number]
+const CHOOSING_TIME = 3.4 // at least 3s slower — the suspenseful "deciding" pause
 const PHASE_TIME: Record<Phase, number> = {
   toPile: 0.5,
   descend: 0.55,
   grab: 0.3,
+  choosing: CHOOSING_TIME,
   ascend: 0.55,
   toChute: 0.6,
   release: 0.25,
@@ -246,7 +258,7 @@ export class MysteryBox {
     this.state = 'busy'
     this.phase = 'toPile'
     this.phaseT = 0
-    this.offered = BOX_WEAPONS[Math.floor(Math.random() * BOX_WEAPONS.length)]
+    this.offered = null // decided at the end of the 'choosing' phase, for real suspense
     this.grabbedPile = this.pile[Math.floor(Math.random() * this.pile.length)]
     this.setProngs(1)
   }
@@ -301,6 +313,18 @@ export class MysteryBox {
           this.claw.add(this.prizeBox)
           this.prizeBox.position.set(0, -0.32, 0)
           this.prizeBox.rotation.set(0, 0, 0)
+        }
+        break
+      case 'choosing':
+        // claw holds still with the box while the prize is decided — the suspense beat
+        if (this.phaseT % 0.15 < dt) {
+          const random = BOX_WEAPONS[Math.floor(Math.random() * BOX_WEAPONS.length)]
+          this.drawLabel(random.name, '???')
+          this.onTick?.()
+        }
+        if (t >= 1) {
+          this.offered = BOX_WEAPONS[Math.floor(Math.random() * BOX_WEAPONS.length)]
+          this.drawLabel('IT’S DECIDED…', '???')
         }
         break
       case 'ascend':

@@ -5,6 +5,7 @@ export class Input {
 
   locked = false
   fireHeld = false
+  aimHeld = false
 
   private keys = new Set<string>()
   private lookX = 0
@@ -133,20 +134,28 @@ export class Input {
     window.addEventListener('blur', () => this.keys.clear())
 
     this.canvas.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return
+      if (e.button !== 0 && e.button !== 2) return
       if (!this.locked) {
         this.canvas.requestPointerLock()
         return
       }
-      this.fireHeld = true
-      this.firePresses++
+      if (e.button === 0) {
+        this.fireHeld = true
+        this.firePresses++
+      } else {
+        this.aimHeld = true
+      }
     })
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.fireHeld = false
+      else if (e.button === 2) this.aimHeld = false
     })
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas
-      if (!this.locked) this.fireHeld = false
+      if (!this.locked) {
+        this.fireHeld = false
+        this.aimHeld = false
+      }
     })
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return
@@ -164,6 +173,7 @@ export class Input {
       <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
       <div id="look-zone"></div>
       <button id="btn-fire">FIRE</button>
+      <button id="btn-aim">ADS</button>
       <button id="btn-reload">R</button>
       <button id="btn-swap">⇄</button>
       <button id="btn-jump">▲</button>
@@ -249,6 +259,15 @@ export class Input {
     const fireEnd = () => (this.fireHeld = false)
     fire.addEventListener('pointerup', fireEnd)
     fire.addEventListener('pointercancel', fireEnd)
+
+    const aim = root.querySelector<HTMLElement>('#btn-aim')!
+    aim.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      this.aimHeld = true
+    })
+    const aimEnd = () => (this.aimHeld = false)
+    aim.addEventListener('pointerup', aimEnd)
+    aim.addEventListener('pointercancel', aimEnd)
 
     root.querySelector('#btn-reload')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
