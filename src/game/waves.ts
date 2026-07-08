@@ -89,6 +89,20 @@ export class WaveSystem {
     this.timer = FIRST_WAVE_DELAY
   }
 
+  /** Host migration: continue an in-progress game instead of restarting the wave clock. */
+  resumeAt(wave: number, phase: WavePhase) {
+    this.wave = Math.max(wave, 1)
+    if (phase === 'intermission') {
+      this.phase = 'intermission'
+      this.timer = 4
+    } else {
+      this.phase = 'active'
+      // the surviving horde covers the rest of this wave — don't double-spawn
+      this.pendingSpawns = 0
+      this.spawnTimer = SPAWN_INTERVAL
+    }
+  }
+
   zombieCount(wave: number): number {
     return Math.min(5 + (wave - 1) * 3, 32)
   }

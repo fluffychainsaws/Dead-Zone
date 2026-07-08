@@ -4,7 +4,7 @@ import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem } from './weapons'
 import { Effects } from './effects'
-import { Horde, WaveSystem } from './waves'
+import { Horde, WaveSystem, type WavePhase } from './waves'
 import { Economy, POINTS } from './economy'
 import { MysteryBox, BOX_COST } from './mysterybox'
 import { RemotePlayer, RemoteZombieField } from './remote'
@@ -47,9 +47,12 @@ export class Game {
   private netTimer = 0
   private hostId: string | null = null
   private clientWave = 0
+  private clientPhase: WavePhase = 'active'
   private lobby: Lobby | null = null
   private pause = new PauseMenu()
   private paused = false
+  private migrating = false
+  private migrationWatchdog: ReturnType<typeof setTimeout> | null = null
   private wasDowned = false
   private downNotified = new Set<string>()
   private mysteryBox!: MysteryBox
@@ -145,6 +148,16 @@ export class Game {
     this.netMode = 'host'
     this.net = new NetRoom(code)
     this.bindCommonNet()
+    this.bindHostNet()
+    this.hud.setRoomInfo(`CODE: ${code}`)
+    this.beginPlaying()
+    this.waves.begin()
+    this.announceToLobby(code)
+  }
+
+  /** Host-side message handlers — bound at game start, and again on host migration. */
+  private bindHostNet() {
+    if (!this.net) return
     this.net.onInput((s, from) => {
       this.peerStates.set(from, s)
       this.ensureAvatar(from).applyState(s)
@@ -168,9 +181,9 @@ export class Game {
         from,
       )
     })
-    this.hud.setRoomInfo(`CODE: ${code}`)
-    this.beginPlaying()
-    this.waves.begin()
+  }
+
+  private announceToLobby(code: string) {
     // announce this game to the global lobby while it's joinable
     this.lobby = new Lobby()
     this.lobby.startAnnouncing(() => ({
@@ -187,6 +200,14 @@ export class Game {
     this.bindCommonNet()
     this.net.onState((s, from) => {
       this.hostId = from
+      if (this.migrating) {
+        this.migrating = false
+        if (this.migrationWatchdog) {
+          clearTimeout(this.migrationWatchdog)
+          this.migrationWatchdog = null
+        }
+        this.hud.banner('NEW HOST CONNECTED', 1800)
+      }
       this.applyHostState(s, from)
     })
     this.net.onScore((s) => {
@@ -224,12 +245,63 @@ export class Game {
       this.peerStates.delete(id)
       this.updateRoomCount()
       if (this.netMode === 'client' && id === this.hostId) {
-        this.hud.banner('HOST LEFT — GAME ENDED', 5000)
-        setTimeout(() => location.reload(), 3200)
+        this.beginHostMigration()
       } else {
         this.hud.banner('SURVIVOR LEFT', 1800)
       }
     })
+  }
+
+  // ------------------------------ host migration ------------------------------
+
+  /** The host disconnected — freeze, elect a successor, and hand off without ending the game. */
+  private beginHostMigration() {
+    if (this.migrating) return
+    this.migrating = true
+    this.hud.banner('HOST LEFT — MIGRATING…', 12000)
+    audio.deny()
+    // give the WebRTC mesh a moment to settle so every survivor sees the same peer set
+    setTimeout(() => this.resolveMigration(), 900)
+  }
+
+  private resolveMigration() {
+    if (!this.net || this.netMode !== 'client') return
+    // deterministic election: every survivor computes the same sorted list independently
+    const survivors = [selfId, ...this.net.peers()].sort()
+    const newHostId = survivors[0]
+    if (newHostId === selfId) {
+      this.promoteToHost()
+      return
+    }
+    // someone else is taking over — wait for their first state broadcast to arrive
+    // (onState already clears `migrating` the moment any state message shows up)
+    this.migrationWatchdog = setTimeout(() => {
+      if (this.migrating) {
+        this.hud.banner('CONNECTION LOST — GAME ENDED', 4000)
+        setTimeout(() => location.reload(), 3200)
+      }
+    }, 8000)
+  }
+
+  private promoteToHost() {
+    this.netMode = 'host'
+    this.hostId = null
+    this.bindHostNet()
+
+    // rebuild the horde from the last positions we saw as a client
+    this.horde.reset()
+    const wave = Math.max(this.clientWave, 1)
+    for (const z of this.remoteZombies.snapshot()) {
+      if (z.dying) continue // don't resurrect a zombie mid-death animation
+      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), this.waves.zombieHp(wave), z.runner)
+    }
+    this.remoteZombies.clear()
+    this.waves.resumeAt(this.clientWave, this.clientPhase)
+
+    this.hud.setRoomInfo(`CODE: ${this.net!.code}`)
+    this.hud.banner('YOU ARE NOW HOST', 2400)
+    this.announceToLobby(this.net!.code)
+    this.migrating = false
   }
 
   private updateRoomCount() {
@@ -285,6 +357,7 @@ export class Game {
         audio.setIntensity(Math.min(0.15 + s.w * 0.08, 1))
       }
     }
+    this.clientPhase = s.ph === 'intermission' ? 'intermission' : 'active'
     for (const id of s.d ?? []) {
       if (!this.arena.doors[id]?.open) this.openDoorEverywhere(id, false)
     }
@@ -567,6 +640,11 @@ export class Game {
       this.camera.position.set(Math.sin(t * 0.07) * 16, 7, Math.cos(t * 0.07) * 16)
       this.camera.lookAt(0, 1, 0)
     } else if (this.mode === 'playing') {
+      if (this.migrating) {
+        // world-wide freeze while a successor host is elected and takes over
+        this.renderer.render(this.scene, this.camera)
+        return
+      }
       if (this.paused) {
         // discard buffered input so nothing fires or jerks on resume
         this.input.consumeLook()

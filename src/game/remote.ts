@@ -161,6 +161,16 @@ export class RemoteZombieField {
     return out
   }
 
+  /** Host migration: hand the last-known horde layout to a newly-promoted host. */
+  snapshot(): Array<{ x: number; z: number; runner: boolean; dying: boolean }> {
+    return [...this.zombies.values()].map((rz) => ({
+      x: rz.group.position.x,
+      z: rz.group.position.z,
+      runner: rz.runner,
+      dying: rz.state === 2,
+    }))
+  }
+
   randomGroanSource(): { pos: THREE.Vector3; runner: boolean } | null {
     const alive = [...this.zombies.values()].filter((z) => z.state !== 2)
     if (alive.length === 0) return null
