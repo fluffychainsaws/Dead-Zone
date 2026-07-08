@@ -236,13 +236,11 @@ function buildZombieMesh(runner: boolean): { group: THREE.Group; parts: Parts } 
   const group = new THREE.Group()
   // rotting skin: sickly green-grey, runners redder
   const hue = runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1
-  const skin = new THREE.MeshStandardMaterial({
+  const skin = new THREE.MeshLambertMaterial({
     color: new THREE.Color().setHSL(hue, 0.35, 0.22 + Math.random() * 0.1),
-    roughness: 0.95,
   })
-  const cloth = new THREE.MeshStandardMaterial({
+  const cloth = new THREE.MeshLambertMaterial({
     color: new THREE.Color().setHSL(Math.random(), 0.15, 0.12 + Math.random() * 0.08),
-    roughness: 1,
   })
 
   const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.58, 0.16), cloth)

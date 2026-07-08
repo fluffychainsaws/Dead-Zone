@@ -12,6 +12,10 @@ export class Hud {
   private weaponEl: HTMLElement
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private hitTimer: ReturnType<typeof setTimeout> | null = null
+  // last-written values — these setters run every frame, the DOM should not
+  private lastAmmo = ''
+  private lastWeapon = ''
+  private lastHealth = ''
 
   constructor(isTouch: boolean) {
     this.root = document.createElement('div')
@@ -66,6 +70,8 @@ export class Hud {
   }
 
   setWeaponName(name: string) {
+    if (name === this.lastWeapon) return
+    this.lastWeapon = name
     this.weaponEl.textContent = name
   }
 
@@ -82,16 +88,22 @@ export class Hud {
   }
 
   setAmmo(mag: number, reserve: number, reloading: boolean) {
-    this.ammoEl.textContent = reloading ? 'RELOADING…' : `${mag} / ${reserve}`
+    const text = reloading ? 'RELOADING…' : `${mag} / ${reserve}`
+    if (text === this.lastAmmo) return
+    this.lastAmmo = text
+    this.ammoEl.textContent = text
     this.ammoEl.classList.toggle('low', !reloading && mag <= 2)
   }
 
   setHealth(hp: number, maxHp: number, recentlyHit: boolean) {
     const frac = Math.max(0, hp / maxHp)
-    this.healthFill.style.width = `${frac * 100}%`
-    this.healthFill.classList.toggle('critical', frac < 0.35)
     // vignette: strong when hurt, pulsing red when critical
     const base = frac < 0.6 ? (0.6 - frac) * 1.3 : 0
+    const key = `${frac.toFixed(3)}|${recentlyHit}`
+    if (key === this.lastHealth) return
+    this.lastHealth = key
+    this.healthFill.style.width = `${frac * 100}%`
+    this.healthFill.classList.toggle('critical', frac < 0.35)
     this.vignetteEl.style.opacity = String(Math.min(0.92, base + (recentlyHit ? 0.45 : 0)))
   }
 

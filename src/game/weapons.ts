@@ -323,9 +323,9 @@ export class WeaponSystem {
 
 export function buildViewmodel(defId: string): THREE.Group {
   const g = new THREE.Group()
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2b2b30, roughness: 0.55, metalness: 0.5 })
-  const wood = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.85 })
-  const grip = new THREE.MeshStandardMaterial({ color: 0x3a2d20, roughness: 0.9 })
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2b2b30, shininess: 45 })
+  const wood = new THREE.MeshLambertMaterial({ color: 0x4a3520 })
+  const grip = new THREE.MeshLambertMaterial({ color: 0x3a2d20 })
 
   // First child is always the muzzle anchor (barrel tip).
   if (defId === 'garand') {

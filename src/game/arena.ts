@@ -1,9 +1,12 @@
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { makeLabelSprite } from './economy'
+import { glowSprite, GLOW_RED } from './effects'
 
 // Blackmarsh Penitentiary — a broken-down jail. Zombies crawl in through
 // breached cell walls and boarded windows (player-blocking, zombie-passable);
 // locked gates split the block into purchasable rooms.
+// All static geometry is merged into one mesh per material to keep draw calls low.
 
 export interface Collider {
   minX: number
@@ -65,15 +68,13 @@ export class Arena {
   openings: Opening[] = []
 
   private scene: THREE.Scene
-  private wallMat = new THREE.MeshStandardMaterial({ color: 0x2a3230, roughness: 0.95 })
-  private cellMat = new THREE.MeshStandardMaterial({ color: 0x232b28, roughness: 0.9 })
-  private barMat = new THREE.MeshStandardMaterial({
-    color: 0x3a4145,
-    roughness: 0.45,
-    metalness: 0.7,
-  })
-  private plankMat = new THREE.MeshStandardMaterial({ color: 0x4a3a22, roughness: 1 })
-  private rubbleMat = new THREE.MeshStandardMaterial({ color: 0x35393a, roughness: 1 })
+  private wallMat = new THREE.MeshLambertMaterial({ color: 0x2a3230 })
+  private cellMat = new THREE.MeshLambertMaterial({ color: 0x232b28 })
+  private barMat = new THREE.MeshPhongMaterial({ color: 0x3a4145, shininess: 55 })
+  private plankMat = new THREE.MeshLambertMaterial({ color: 0x4a3a22 })
+  private rubbleMat = new THREE.MeshLambertMaterial({ color: 0x35393a })
+  // static geometry buckets, merged into one mesh per material after build
+  private statics = new Map<THREE.Material, THREE.BufferGeometry[]>()
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
@@ -84,9 +85,31 @@ export class Arena {
     this.buildCells()
     this.buildProps()
     this.buildLights()
+    this.mergeStatics()
   }
 
   // ---------------------------------------------------------------- geometry
+
+  private addStatic(geo: THREE.BufferGeometry, mat: THREE.Material) {
+    let list = this.statics.get(mat)
+    if (!list) {
+      list = []
+      this.statics.set(mat, list)
+    }
+    list.push(geo)
+  }
+
+  private mergeStatics() {
+    for (const [mat, geos] of this.statics) {
+      const merged = mergeGeometries(geos)
+      if (!merged) continue
+      const mesh = new THREE.Mesh(merged, mat)
+      this.scene.add(mesh)
+      this.colliderMeshes.push(mesh)
+      for (const g of geos) g.dispose()
+    }
+    this.statics.clear()
+  }
 
   private box(
     cx: number,
@@ -96,12 +119,11 @@ export class Arena {
     h: number,
     mat: THREE.Material,
     opts: { blocksPlayer?: boolean; blocksZombie?: boolean; y?: number } = {},
-  ): THREE.Mesh {
+  ) {
     const { blocksPlayer = true, blocksZombie = true, y } = opts
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
-    mesh.position.set(cx, y ?? h / 2, cz)
-    this.scene.add(mesh)
-    this.colliderMeshes.push(mesh)
+    const geo = new THREE.BoxGeometry(w, h, d)
+    geo.translate(cx, y ?? h / 2, cz)
+    this.addStatic(geo, mat)
     const c: Collider = {
       minX: cx - w / 2,
       maxX: cx + w / 2,
@@ -110,17 +132,16 @@ export class Arena {
     }
     if (blocksPlayer) this.playerColliders.push(c)
     if (blocksZombie) this.zombieColliders.push(c)
-    return mesh
   }
 
   private buildFloorAndSky() {
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(90, 74, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x181d1a, roughness: 1 }),
+      new THREE.PlaneGeometry(90, 74, 1, 1),
+      new THREE.MeshLambertMaterial({ color: 0x181d1a }),
     )
     ground.rotation.x = -Math.PI / 2
     this.scene.add(ground)
-    this.colliderMeshes.push(ground as unknown as THREE.Mesh)
+    this.colliderMeshes.push(ground)
     this.scene.fog = new THREE.FogExp2(0x0a100a, 0.026)
     this.scene.background = new THREE.Color(0x0a100a)
   }
@@ -177,33 +198,33 @@ export class Arena {
     if (kind === 'window') {
       // two weathered planks bullets can pass between
       for (const y of [0.55, 1.1]) {
-        const plank = new THREE.Mesh(
-          new THREE.BoxGeometry(isX ? WIN_W : T * 0.5, 0.18, isX ? T * 0.5 : WIN_W),
-          this.plankMat,
+        const plank = new THREE.BoxGeometry(
+          isX ? WIN_W : T * 0.5,
+          0.18,
+          isX ? T * 0.5 : WIN_W,
         )
-        plank.position.set(cx, y, cz)
-        plank.rotation.y = (Math.random() - 0.5) * 0.08
-        this.scene.add(plank)
-        this.colliderMeshes.push(plank)
+        plank.rotateY((Math.random() - 0.5) * 0.08)
+        plank.translate(cx, y, cz)
+        this.addStatic(plank, this.plankMat)
       }
       // shattered frame stubs above
-      const lintel = new THREE.Mesh(
-        new THREE.BoxGeometry(isX ? WIN_W + 0.4 : T, H - 2.2, isX ? T : WIN_W + 0.4),
-        this.wallMat,
+      const lintel = new THREE.BoxGeometry(
+        isX ? WIN_W + 0.4 : T,
+        H - 2.2,
+        isX ? T : WIN_W + 0.4,
       )
-      lintel.position.set(cx, 2.2 + (H - 2.2) / 2, cz)
-      this.scene.add(lintel)
-      this.colliderMeshes.push(lintel)
+      lintel.translate(cx, 2.2 + (H - 2.2) / 2, cz)
+      this.addStatic(lintel, this.wallMat)
     } else {
       // breach: pile of rubble at the base of a collapsed wall section
-      const rubble = new THREE.Mesh(
-        new THREE.BoxGeometry(isX ? WIN_W + 0.3 : T + 0.5, 0.55, isX ? T + 0.5 : WIN_W + 0.3),
-        this.rubbleMat,
+      const rubble = new THREE.BoxGeometry(
+        isX ? WIN_W + 0.3 : T + 0.5,
+        0.55,
+        isX ? T + 0.5 : WIN_W + 0.3,
       )
-      rubble.position.set(cx, 0.27, cz)
-      rubble.rotation.y = 0.1
-      this.scene.add(rubble)
-      this.colliderMeshes.push(rubble)
+      rubble.rotateY(0.1)
+      rubble.translate(cx, 0.27, cz)
+      this.addStatic(rubble, this.rubbleMat)
     }
 
     // spawn outside, first waypoint inside — offset perpendicular to the wall
@@ -226,6 +247,10 @@ export class Arena {
         maxZ: blocker.maxZ + 1,
       },
     })
+    // danger marker — emissive sprite, not a real light
+    const glow = glowSprite(GLOW_RED, 2.4, 0.5)
+    glow.position.set(cx, 1.5, cz)
+    this.scene.add(glow)
   }
 
   private inwardSign(axis: 'x' | 'z', fixed: number): number {
@@ -282,31 +307,27 @@ export class Arena {
     defs.forEach((d, id) => {
       const group = new THREE.Group()
       group.position.set(d.x, 0, d.z)
-      const meshes: THREE.Mesh[] = []
       const isX = d.axis === 'x'
-      // vertical bars across the gap
+      // whole gate is one merged mesh: 5 bars + 3 crossbars
+      const parts: THREE.BufferGeometry[] = []
       for (let i = -2; i <= 2; i++) {
-        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 3.4), this.barMat)
+        const bar = new THREE.CylinderGeometry(0.055, 0.055, 3.4)
         const off = i * (GATE_W / 5.2)
-        bar.position.set(isX ? off : 0, 1.7, isX ? 0 : off)
-        group.add(bar)
-        meshes.push(bar)
+        bar.translate(isX ? off : 0, 1.7, isX ? 0 : off)
+        parts.push(bar)
       }
-      // crossbars
       for (const y of [0.4, 1.7, 3.0]) {
-        const cross = new THREE.Mesh(
-          new THREE.BoxGeometry(isX ? GATE_W : 0.12, 0.12, isX ? 0.12 : GATE_W),
-          this.barMat,
-        )
-        cross.position.set(0, y, 0)
-        group.add(cross)
-        meshes.push(cross)
+        const cross = new THREE.BoxGeometry(isX ? GATE_W : 0.12, 0.12, isX ? 0.12 : GATE_W)
+        cross.translate(0, y, 0)
+        parts.push(cross)
       }
+      const gateMesh = new THREE.Mesh(mergeGeometries(parts), this.barMat)
+      group.add(gateMesh)
       const label = makeLabelSprite([d.name, `${d.cost}`])
       label.position.y = 4.1
       group.add(label)
       this.scene.add(group)
-      this.colliderMeshes.push(...meshes)
+      this.colliderMeshes.push(gateMesh)
       const c: Collider = {
         minX: d.x - (isX ? GATE_W / 2 : T / 2),
         maxX: d.x + (isX ? GATE_W / 2 : T / 2),
@@ -325,7 +346,7 @@ export class Arena {
         open: false,
         group,
         colliders: [c],
-        meshes,
+        meshes: [gateMesh],
       })
     })
   }
@@ -340,10 +361,9 @@ export class Arena {
       }
       this.box(x, 20.5, 0.3, 3, 3.2, this.cellMat)
       // partial bar front with an open doorway (players can duck into cells)
-      const front = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.12), this.barMat)
-      front.position.set(x - 1.2, 1.3, 19)
-      this.scene.add(front)
-      this.colliderMeshes.push(front)
+      const front = new THREE.BoxGeometry(2.4, 2.6, 0.12)
+      front.translate(x - 1.2, 1.3, 19)
+      this.addStatic(front, this.barMat)
       this.playerColliders.push({ minX: x - 2.4, maxX: x - 0.05, minZ: 18.9, maxZ: 19.1 })
       this.zombieColliders.push({ minX: x - 2.4, maxX: x - 0.05, minZ: 18.9, maxZ: 19.1 })
     }
@@ -392,12 +412,6 @@ export class Arena {
       const lamp = new THREE.PointLight(0x66ff44, 16, 26, 1.7)
       lamp.position.set(x, 4.6, z)
       this.scene.add(lamp)
-    }
-    // danger glow at every opening
-    for (const o of this.openings) {
-      const glow = new THREE.PointLight(0xaa1111, 6, 9, 1.7)
-      glow.position.set(o.inside.x, 1.4, o.inside.z)
-      this.scene.add(glow)
     }
   }
 

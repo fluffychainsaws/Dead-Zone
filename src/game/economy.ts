@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { WEAPONS, buildViewmodel, type WeaponDef } from './weapons'
+import { glowSprite, GLOW_GOLD } from './effects'
 
 export const POINTS = {
   hit: 10,
@@ -61,7 +62,7 @@ export class Economy {
 
       const pedestal = new THREE.Mesh(
         new THREE.BoxGeometry(1.1, 0.9, 1.1),
-        new THREE.MeshStandardMaterial({ color: 0x1e2a1e, roughness: 0.8 }),
+        new THREE.MeshLambertMaterial({ color: 0x1e2a1e }),
       )
       pedestal.position.y = 0.45
       display.add(pedestal)
@@ -76,8 +77,8 @@ export class Economy {
       label.position.y = 2.5
       display.add(label)
 
-      const glow = new THREE.PointLight(0xe0c020, 5, 7, 1.8)
-      glow.position.y = 1.8
+      const glow = glowSprite(GLOW_GOLD, 2.2, 0.55)
+      glow.position.y = 1.6
       display.add(glow)
 
       scene.add(display)

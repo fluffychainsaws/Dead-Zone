@@ -49,7 +49,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     this.arena = buildArena(this.scene)
     this.scene.add(this.camera) // so viewmodel (camera child) renders
     // dim carry-light so the viewmodel and nearby ground stay readable

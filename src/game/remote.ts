@@ -31,8 +31,8 @@ export class RemotePlayer {
 
   constructor(scene: THREE.Scene, name: string) {
     this.group = new THREE.Group()
-    const uniform = new THREE.MeshStandardMaterial({ color: 0x2e3b2a, roughness: 0.9 })
-    const skin = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.9 })
+    const uniform = new THREE.MeshLambertMaterial({ color: 0x2e3b2a })
+    const skin = new THREE.MeshLambertMaterial({ color: 0x8a7a5a })
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.26), uniform)
     body.position.y = 1.0
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.26, 0.24), skin)
@@ -41,7 +41,7 @@ export class RemotePlayer {
     legs.position.y = 0.36
     const gun = new THREE.Mesh(
       new THREE.BoxGeometry(0.07, 0.09, 0.5),
-      new THREE.MeshStandardMaterial({ color: 0x22232a, roughness: 0.5, metalness: 0.5 }),
+      new THREE.MeshLambertMaterial({ color: 0x22232a }),
     )
     gun.position.set(0.22, 1.12, -0.3)
     const tag = makeNameTag(name)
