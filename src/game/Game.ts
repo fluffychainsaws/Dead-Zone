@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { buildArena, type Arena } from './arena'
 import { Player } from './player'
 import { Input } from './input'
-import { WeaponSystem } from './weapons'
+import { WeaponSystem, weaponKind } from './weapons'
 import { Effects } from './effects'
 import { Horde, WaveSystem, type WavePhase } from './waves'
 import { Economy, POINTS } from './economy'
@@ -408,7 +408,7 @@ export class Game {
   /** Render another player's tracers/impacts so everyone can see where teammates are shooting. */
   private renderRemoteFx(fx: ShotFxMsg) {
     const muzzle = new THREE.Vector3(...fx.muzzle)
-    audio.gunshot(fx.wid)
+    audio.gunshot(weaponKind(fx.wid))
     this.effects.muzzleFlash(muzzle)
     for (const [x, y, z, hit] of fx.pts) {
       const point = new THREE.Vector3(x, y, z)
@@ -600,17 +600,17 @@ export class Game {
       if (this.economy.spend(BOX_COST)) {
         this.hud.setPoints(this.economy.points)
         this.hud.pointsDelta(-BOX_COST)
-        this.mysteryBox.spin()
+        this.mysteryBox.play()
         audio.purchase()
       } else {
         this.hud.banner('NOT ENOUGH POINTS', 1200)
         audio.deny()
       }
-    } else if (this.mysteryBox.state === 'offering') {
+    } else if (this.mysteryBox.state === 'ready') {
       const def = this.mysteryBox.take()
       if (def) {
         this.weapon.give(def)
-        this.hud.banner(def.name, 2000)
+        this.hud.banner(`IT'S A ${def.name}!`, 2400)
         audio.purchase()
       }
     }
@@ -785,7 +785,7 @@ export class Game {
           this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
         const targets = [...this.arena.colliderMeshes, ...zombieTargets]
         const hits = this.weapon.update(dt, this.input, this.camera, targets, this.effects)
-        if (this.weapon.events.fired) audio.gunshot(this.weapon.def.id)
+        if (this.weapon.events.fired) audio.gunshot(weaponKind(this.weapon.def.id))
         if (this.weapon.events.dryFired) audio.dryFire()
         if (this.weapon.events.reloadStarted) audio.reload()
         for (const hit of hits) {

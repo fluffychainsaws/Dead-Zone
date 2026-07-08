@@ -259,8 +259,10 @@ export class AudioEngine {
     }
   }
 
-  gunshot(weaponId: string) {
-    switch (weaponId) {
+  /** `kind` is a weapon archetype (see weaponKind() in weapons.ts), not a raw weapon id —
+   *  several weapons can share a look+sound, but every archetype is distinct from every other. */
+  gunshot(kind: string) {
+    switch (kind) {
       case 'trench':
         this.noiseHit({ decay: 0.4, freq: 700, gain: 1.0 })
         this.tone({ from: 110, to: 35, dur: 0.28, gain: 0.9 })
@@ -284,6 +286,33 @@ export class AudioEngine {
       case 'kurz':
         this.noiseHit({ decay: 0.07, freq: 1800, gain: 0.65 })
         this.tone({ from: 130, to: 55, dur: 0.07, gain: 0.45 })
+        break
+      case 'mg':
+        // heavy belt-fed chug — deep and long-tailed
+        this.noiseHit({ decay: 0.22, freq: 550, gain: 1.0 })
+        this.tone({ from: 90, to: 30, dur: 0.22, gain: 0.85 })
+        break
+      case 'saw':
+        // lighter and quicker than the belt-fed 'mg', still meaty
+        this.noiseHit({ decay: 0.16, freq: 780, gain: 0.95 })
+        this.tone({ from: 105, to: 36, dur: 0.15, gain: 0.75 })
+        break
+      case 'sniper': {
+        // a sharp crack transient in front of a big, slow boom
+        this.noiseHit({ decay: 0.03, freq: 4200, filterType: 'highpass', gain: 0.5 })
+        this.noiseHit({ decay: 0.55, freq: 380, gain: 1.0 })
+        this.tone({ from: 65, to: 20, dur: 0.55, gain: 1.0 })
+        break
+      }
+      case 'ww2smg':
+        // boxy, echoey mid-range chatter — Thompson/MP40 flavor
+        this.noiseHit({ decay: 0.13, freq: 1300, gain: 0.85 })
+        this.tone({ from: 160, to: 55, dur: 0.11, gain: 0.6 })
+        break
+      case 'vietnam':
+        // sharp AK-style crack, distinct from the SMG buzz of 'kurz'
+        this.noiseHit({ decay: 0.14, freq: 1000, gain: 0.9 })
+        this.tone({ from: 135, to: 42, dur: 0.12, gain: 0.65 })
         break
       default: // pistol
         this.noiseHit({ decay: 0.11, freq: 1500, gain: 0.75 })

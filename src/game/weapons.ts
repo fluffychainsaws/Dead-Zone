@@ -14,8 +14,20 @@ export interface WeaponDef {
   spread: number // radians
   auto: boolean
   pellets: number
-  /** Viewmodel template — defaults to the weapon's own id. */
-  model?: 'pistol' | 'garand' | 'trench' | 'kurz' | 'magnum' | 'liberator' | 'hellfire' | 'mg' | 'sniper'
+  /** Viewmodel/sound archetype — defaults to the weapon's own id. */
+  model?:
+    | 'pistol'
+    | 'garand'
+    | 'trench'
+    | 'kurz'
+    | 'magnum'
+    | 'liberator'
+    | 'hellfire'
+    | 'mg'
+    | 'sniper'
+    | 'saw'
+    | 'ww2smg'
+    | 'vietnam'
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
@@ -138,15 +150,15 @@ const box = (
 ): WeaponDef => ({ id, name, model, ...stats })
 
 export const BOX_WEAPONS: WeaponDef[] = [
-  box('vampir', 'VAMPIR MP', 'kurz', { damage: 30, headshotMult: 2.2, rpm: 850, magSize: 40, maxReserve: 240, reloadTime: 2.0, spread: 0.03, auto: true, pellets: 1 }),
-  box('reaper', 'REAPER LMG', 'mg', { damage: 40, headshotMult: 2.4, rpm: 600, magSize: 120, maxReserve: 360, reloadTime: 4.2, spread: 0.032, auto: true, pellets: 1 }),
+  box('vampir', 'VAMPIR MP40', 'ww2smg', { damage: 30, headshotMult: 2.2, rpm: 850, magSize: 40, maxReserve: 240, reloadTime: 2.0, spread: 0.03, auto: true, pellets: 1 }),
+  box('reaper', 'REAPER SAW', 'saw', { damage: 40, headshotMult: 2.4, rpm: 600, magSize: 120, maxReserve: 360, reloadTime: 4.2, spread: 0.032, auto: true, pellets: 1 }),
   box('dragon', 'DRAGON’S BREATH', 'trench', { damage: 15, headshotMult: 2, rpm: 90, magSize: 8, maxReserve: 56, reloadTime: 2.4, spread: 0.09, auto: false, pellets: 10 }),
   box('longtooth', 'LONGTOOTH', 'sniper', { damage: 250, headshotMult: 5, rpm: 45, magSize: 5, maxReserve: 40, reloadTime: 2.8, spread: 0.001, auto: false, pellets: 1 }),
   box('twins', 'THE TWINS', 'pistol', { damage: 34, headshotMult: 2.5, rpm: 900, magSize: 16, maxReserve: 128, reloadTime: 1.8, spread: 0.04, auto: true, pellets: 1 }),
   box('ripsaw', 'RIPSAW', 'mg', { damage: 34, headshotMult: 2.2, rpm: 1000, magSize: 150, maxReserve: 300, reloadTime: 4.6, spread: 0.045, auto: true, pellets: 1 }),
   box('judge', 'THE JUDGE', 'magnum', { damage: 130, headshotMult: 4, rpm: 120, magSize: 5, maxReserve: 40, reloadTime: 2.2, spread: 0.004, auto: false, pellets: 1 }),
   box('sweeper', 'STREET SWEEPER', 'hellfire', { damage: 13, headshotMult: 2, rpm: 240, magSize: 12, maxReserve: 72, reloadTime: 2.8, spread: 0.085, auto: true, pellets: 8 }),
-  box('needler', 'NEEDLER', 'kurz', { damage: 20, headshotMult: 2.2, rpm: 1100, magSize: 60, maxReserve: 300, reloadTime: 2.2, spread: 0.035, auto: true, pellets: 1 }),
+  box('needler', 'NEEDLER-47', 'vietnam', { damage: 20, headshotMult: 2.2, rpm: 1100, magSize: 60, maxReserve: 300, reloadTime: 2.2, spread: 0.035, auto: true, pellets: 1 }),
   box('bear', 'BEAR KILLER', 'garand', { damage: 110, headshotMult: 3.5, rpm: 140, magSize: 10, maxReserve: 80, reloadTime: 2.0, spread: 0.006, auto: false, pellets: 1 }),
   box('spitfire', 'SPITFIRE', 'mg', { damage: 28, headshotMult: 2.2, rpm: 750, magSize: 100, maxReserve: 400, reloadTime: 3.6, spread: 0.03, auto: true, pellets: 1 }),
   box('widow', 'WIDOWMAKER', 'liberator', { damage: 85, headshotMult: 3, rpm: 260, magSize: 12, maxReserve: 96, reloadTime: 2.0, spread: 0.004, auto: false, pellets: 1 }),
@@ -158,6 +170,11 @@ export const BOX_WEAPONS: WeaponDef[] = [
 export const ALL_WEAPONS: Record<string, WeaponDef> = {
   ...WEAPONS,
   ...Object.fromEntries(BOX_WEAPONS.map((w) => [w.id, w])),
+}
+
+/** Visual/sound archetype for a weapon id — several weapons can share one look+sound. */
+export function weaponKind(id: string): string {
+  return ALL_WEAPONS[id]?.model ?? id
 }
 
 export interface ShotHit {
@@ -428,10 +445,86 @@ export function buildViewmodel(defId: string): THREE.Group {
   const dark = new THREE.MeshPhongMaterial({ color: 0x2b2b30, shininess: 45 })
   const wood = new THREE.MeshLambertMaterial({ color: 0x4a3520 })
   const grip = new THREE.MeshLambertMaterial({ color: 0x3a2d20 })
-  const kind = ALL_WEAPONS[defId]?.model ?? defId
+  const kind = weaponKind(defId)
+  const drab = new THREE.MeshLambertMaterial({ color: 0x3d4a34 }) // olive-drab furniture
 
   // First child is always the muzzle anchor (barrel tip).
-  if (kind === 'mg') {
+  if (kind === 'saw') {
+    // M249-style: bipod + top-forward box mag set it apart from the belt-fed 'mg'
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.72, 8), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.04, -0.46)
+    g.add(barrel)
+    const foresight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.02), dark)
+    foresight.position.set(0, 0.11, -0.68)
+    g.add(foresight)
+    const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.32, 8), drab)
+    handguard.rotation.x = Math.PI / 2
+    handguard.position.set(0, 0.02, -0.28)
+    g.add(handguard)
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.02), dark)
+      leg.position.set(side * 0.09, -0.08, -0.42)
+      leg.rotation.z = side * 0.35
+      g.add(leg)
+    }
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.11, 0.36), drab)
+    g.add(body)
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.09), dark)
+    mag.position.set(0, 0.14, -0.1) // top-mounted, unlike the SAW's belt box
+    g.add(mag)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.22), drab)
+    stock.position.set(0, -0.01, 0.27)
+    g.add(stock)
+  } else if (kind === 'ww2smg') {
+    // Thompson-style: drum magazine + vertical foregrip + wood furniture
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.34, 8), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.03, -0.32)
+    g.add(barrel)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.28), dark)
+    g.add(body)
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), dark)
+    drum.rotation.x = Math.PI / 2
+    drum.position.set(0, -0.13, -0.06)
+    g.add(drum)
+    const foregrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), wood)
+    foregrip.position.set(0, -0.09, -0.24)
+    g.add(foregrip)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.24), wood)
+    stock.position.set(0, -0.02, 0.24)
+    g.add(stock)
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.1, 0.05), wood)
+    handle.position.set(0, -0.09, 0.08)
+    handle.rotation.x = 0.3
+    g.add(handle)
+  } else if (kind === 'vietnam') {
+    // AK-style: curved banana magazine is the unmistakable silhouette here
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.42, 8), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.03, -0.36)
+    g.add(barrel)
+    const foresight = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.07, 0.018), dark)
+    foresight.position.set(0, 0.09, -0.55)
+    g.add(foresight)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.1, 0.34), dark)
+    g.add(body)
+    // curved magazine: two angled segments approximate the banana curve
+    const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.14, 0.055), dark)
+    magUpper.position.set(0, -0.1, -0.05)
+    magUpper.rotation.x = 0.22
+    g.add(magUpper)
+    const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.13, 0.05), dark)
+    magLower.position.set(0, -0.21, -0.14)
+    magLower.rotation.x = 0.5
+    g.add(magLower)
+    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.18), wood)
+    handguard.position.set(0, -0.01, -0.32)
+    g.add(handguard)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.26), wood)
+    stock.position.set(0, -0.01, 0.27)
+    g.add(stock)
+  } else if (kind === 'mg') {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.66, 8), dark)
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.03, -0.42)

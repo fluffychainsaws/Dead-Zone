@@ -122,7 +122,7 @@ export class Input {
       if (e.repeat) return
       this.keys.add(e.code)
       if (e.code === 'KeyR') this.reloadPresses++
-      if (e.code === 'KeyE' || e.code === 'KeyF') this.interactPresses++
+      if (e.code === 'KeyE') this.interactPresses++
       if (e.code === 'KeyQ' || e.code === 'Digit1' || e.code === 'Digit2')
         this.switchPresses++
       if (e.code === 'Space') this.jumpPresses++
