@@ -1,6 +1,5 @@
 import * as THREE from 'three'
-import { Zombie, type TargetInfo } from './zombie'
-import type { Collider } from './arena'
+import { Zombie, type TargetInfo, type ZombieNav } from './zombie'
 
 export type WavePhase = 'idle' | 'intermission' | 'active'
 
@@ -39,10 +38,10 @@ export class Horde {
   }
 
   /** Returns damage dealt this frame, keyed by target id. */
-  update(dt: number, targets: TargetInfo[], colliders: Collider[]): Record<string, number> {
+  update(dt: number, targets: TargetInfo[], nav: ZombieNav): Record<string, number> {
     const damage: Record<string, number> = {}
     for (const z of this.zombies) {
-      const hit = z.update(dt, targets, colliders, this.zombies)
+      const hit = z.update(dt, targets, nav, this.zombies)
       if (hit) damage[hit.targetId] = (damage[hit.targetId] ?? 0) + hit.damage
     }
     this.zombies = this.zombies.filter((z) => !z.dead)
@@ -74,15 +73,12 @@ export class WaveSystem {
   private pendingSpawns = 0
   private spawnTimer = 0
   private horde: Horde
-  private spawnPoints: THREE.Vector3[]
+  private getSpawns: () => THREE.Vector3[]
   private events: WaveEvents
 
-  constructor(horde: Horde, spawnPoints: THREE.Vector3[], events: WaveEvents = {}) {
+  constructor(horde: Horde, getSpawns: () => THREE.Vector3[], events: WaveEvents = {}) {
     this.horde = horde
-    // spawn just inside the wall gaps
-    this.spawnPoints = spawnPoints.map((p) =>
-      new THREE.Vector3(p.x * 0.92, 0, p.z * 0.92),
-    )
+    this.getSpawns = getSpawns
     this.events = events
   }
 
@@ -124,13 +120,15 @@ export class WaveSystem {
     if (this.pendingSpawns > 0) {
       this.spawnTimer -= dt
       if (this.spawnTimer <= 0 && this.horde.aliveCount < MAX_ALIVE) {
+        const spawns = this.getSpawns()
+        if (spawns.length === 0) return
         this.spawnTimer = SPAWN_INTERVAL
         this.pendingSpawns--
-        const p = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)]
+        const p = spawns[Math.floor(Math.random() * spawns.length)]
         const jitter = new THREE.Vector3(
-          (Math.random() - 0.5) * 2.5,
+          (Math.random() - 0.5) * 1.4,
           0,
-          (Math.random() - 0.5) * 2.5,
+          (Math.random() - 0.5) * 1.4,
         )
         this.horde.spawn(
           p.clone().add(jitter),

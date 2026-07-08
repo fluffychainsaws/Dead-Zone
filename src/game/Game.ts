@@ -63,7 +63,7 @@ export class Game {
     this.hud = new Hud(this.input.isTouch)
     this.horde = new Horde(this.scene)
     this.remoteZombies = new RemoteZombieField(this.scene)
-    this.waves = new WaveSystem(this.horde, this.arena.spawnPoints, {
+    this.waves = new WaveSystem(this.horde, () => this.arena.activeSpawns(), {
       onWaveStart: (w) => {
         this.hud.setWave(w)
         this.hud.banner(`WAVE ${w}`)
@@ -200,6 +200,14 @@ export class Game {
   private weaponDefs() {
     // avoids importing WEAPONS at use sites; single source in weapons.ts
     return this.weapon.allDefs()
+  }
+
+  private zombieNav() {
+    return {
+      colliders: this.arena.zombieColliders,
+      nextWaypoint: (p: THREE.Vector3, t: THREE.Vector3) => this.arena.nextWaypoint(p, t),
+      inOpeningZone: (p: THREE.Vector3) => this.arena.inOpeningZone(p),
+    }
   }
 
   private ensureAvatar(id: string): RemotePlayer {
@@ -402,7 +410,7 @@ export class Game {
       this.camera.position.set(Math.sin(t * 0.07) * 16, 7, Math.cos(t * 0.07) * 16)
       this.camera.lookAt(0, 1, 0)
     } else if (this.mode === 'playing') {
-      this.player.update(dt, this.input, this.arena.colliders)
+      this.player.update(dt, this.input, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
 
       // shooting (disabled while downed)
@@ -465,7 +473,7 @@ export class Game {
         // nobody left standing? zombies idle on the last known spot
         if (targetInfos.length === 0)
           targetInfos.push({ id: 'nobody', pos: this.player.pos })
-        const damage = this.horde.update(dt, targetInfos, this.arena.colliders)
+        const damage = this.horde.update(dt, targetInfos, this.zombieNav())
         if (damage['self']) {
           this.player.takeDamage(damage['self'])
           audio.playerHurt()
@@ -487,7 +495,7 @@ export class Game {
     } else {
       // dead: keep rendering; host keeps simulating so spectators see the end
       if (this.netMode !== 'client') {
-        this.horde.update(dt, [{ id: 'nobody', pos: this.player.pos }], this.arena.colliders)
+        this.horde.update(dt, [{ id: 'nobody', pos: this.player.pos }], this.zombieNav())
       } else {
         this.remoteZombies.update(dt)
       }

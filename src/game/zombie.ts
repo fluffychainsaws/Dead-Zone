@@ -19,6 +19,13 @@ export interface AttackResult {
   damage: number
 }
 
+/** What a zombie needs to find its way: colliders it respects + waypoint routing. */
+export interface ZombieNav {
+  colliders: Collider[]
+  nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3
+  inOpeningZone(pos: THREE.Vector3): boolean
+}
+
 interface Parts {
   head: THREE.Mesh
   armL: THREE.Mesh
@@ -45,6 +52,11 @@ export class Zombie {
   private attackT = 0
   private deathT = 0
   private scene: THREE.Scene
+  private lastPos = new THREE.Vector3()
+  private stuckT = 0
+  private sideStep = 0 // seconds of lateral escape left
+  private sideSign = 1
+  private hop = 0 // vault height, eased
 
   constructor(scene: THREE.Scene, pos: THREE.Vector3, hp: number, runner: boolean) {
     this.scene = scene
@@ -80,7 +92,7 @@ export class Zombie {
   update(
     dt: number,
     targets: TargetInfo[],
-    colliders: Collider[],
+    nav: ZombieNav,
     others: Zombie[],
   ): AttackResult | null {
     if (this.state === 'dying') {
@@ -129,9 +141,14 @@ export class Zombie {
       this.parts.armL.rotation.x = -Math.PI / 2 - lunge * 0.5
       this.parts.armR.rotation.x = -Math.PI / 2 - lunge * 0.5
     } else {
-      // shamble toward the player with light flock separation
-      let mx = (dx / dist) * this.speed
-      let mz = (dz / dist) * this.speed
+      // route via openings/gates, then shamble with light flock separation
+      const wp = nav.nextWaypoint(pos, target.pos)
+      const wx = wp.x - pos.x
+      const wz = wp.z - pos.z
+      const wd = Math.hypot(wx, wz) || 1
+      let mx = (wx / wd) * this.speed
+      let mz = (wz / wd) * this.speed
+      this.group.rotation.y = Math.atan2(wx, wz)
       for (const o of others) {
         if (o === this || !o.alive) continue
         const ox = pos.x - o.group.position.x
@@ -142,10 +159,36 @@ export class Zombie {
           mz += (oz / od) * 2.2
         }
       }
+      // anti-stuck: barely moving while chasing → briefly strafe sideways
+      if (this.sideStep > 0) {
+        this.sideStep -= dt
+        const px = -mz * this.sideSign
+        const pz = mx * this.sideSign
+        mx = px
+        mz = pz
+      }
       pos.x += mx * dt
-      this.resolve(colliders, 'x')
+      this.resolve(nav.colliders, 'x')
       pos.z += mz * dt
-      this.resolve(colliders, 'z')
+      this.resolve(nav.colliders, 'z')
+
+      const moved = Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z)
+      if (moved < this.speed * dt * 0.2) {
+        this.stuckT += dt
+        if (this.stuckT > 1.0) {
+          this.stuckT = 0
+          this.sideStep = 0.6
+          this.sideSign = Math.random() < 0.5 ? 1 : -1
+        }
+      } else {
+        this.stuckT = Math.max(0, this.stuckT - dt * 2)
+      }
+      this.lastPos.copy(pos)
+
+      // vault hop through breaches and window frames
+      const wantHop = nav.inOpeningZone(pos) ? 0.42 : 0
+      this.hop += (wantHop - this.hop) * Math.min(1, dt * 8)
+      pos.y = this.hop
 
       // shamble animation
       const swing = Math.sin(this.animT * (this.runner ? 7 : 4.4))

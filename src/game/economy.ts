@@ -16,10 +16,11 @@ export interface WallBuy {
   display: THREE.Group
 }
 
+// One tier per room: cell block → showers → warden's wing (armory tiers in phase 11)
 const STATIONS: Array<{ weapon: string; price: number; pos: [number, number] }> = [
-  { weapon: 'garand', price: 600, pos: [0, -20.5] },
-  { weapon: 'trench', price: 1200, pos: [20.5, 10] },
-  { weapon: 'kurz', price: 1500, pos: [-20.5, -10] },
+  { weapon: 'garand', price: 600, pos: [-6, 20] }, // cell block, by the cells
+  { weapon: 'trench', price: 1200, pos: [-28, -6] }, // showers, west wall
+  { weapon: 'kurz', price: 1500, pos: [28, -6] }, // warden's wing, east wall
 ]
 
 function makeLabelSprite(lines: string[]): THREE.Sprite {

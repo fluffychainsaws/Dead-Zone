@@ -8,8 +8,8 @@ const WALK_SPEED = 4.6
 const SPRINT_SPEED = 7.0
 
 export class Player {
-  pos = new THREE.Vector3(0, 0, 8)
-  yaw = 0 // spawn at +z looking toward the arena center (-z)
+  pos = new THREE.Vector3(0, 0, 11) // middle of the cell block
+  yaw = 0 // facing north, toward the locked gates
   pitch = 0
   hp = 100
   maxHp = 100
