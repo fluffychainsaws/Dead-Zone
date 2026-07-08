@@ -85,6 +85,32 @@ export class Hud {
     document.getElementById('btn-interact')?.classList.toggle('visible', !!text)
   }
 
+  private reviveMarkers = new Map<string, HTMLElement>()
+
+  updateReviveMarkers(list: Array<{ id: string; sx: number; sy: number; dist: number }>) {
+    const seen = new Set<string>()
+    for (const m of list) {
+      seen.add(m.id)
+      let el = this.reviveMarkers.get(m.id)
+      if (!el) {
+        el = document.createElement('div')
+        el.className = 'revive-marker'
+        el.innerHTML = '<span>REVIVE</span><b></b>'
+        this.root.appendChild(el)
+        this.reviveMarkers.set(m.id, el)
+      }
+      el.style.left = `${m.sx}%`
+      el.style.top = `${m.sy}%`
+      el.querySelector('b')!.textContent = `${m.dist}m`
+    }
+    for (const [id, el] of this.reviveMarkers) {
+      if (!seen.has(id)) {
+        el.remove()
+        this.reviveMarkers.delete(id)
+      }
+    }
+  }
+
   hitmarker(kind: 'hit' | 'kill' | 'headshot') {
     this.hitmarkerEl.className = `show ${kind}`
     if (this.hitTimer) clearTimeout(this.hitTimer)

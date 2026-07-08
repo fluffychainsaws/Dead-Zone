@@ -148,10 +148,46 @@ export class WeaponSystem {
   private raycaster = new THREE.Raycaster()
   private camera: THREE.PerspectiveCamera
   private visible = false
+  private stashedIdx: number | null = null
+  private downedTemp: WeaponInstance | null = null
+  private downedMode = false
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera
     this.give(WEAPONS.pistol)
+  }
+
+  /** Going down swaps to a sidearm — your own pistol, or a loaner with 3 mags. */
+  enterDowned() {
+    if (this.downedMode) return
+    this.downedMode = true
+    this.cancelReload()
+    this.stashedIdx = this.activeIdx
+    const pistolIdx = this.slots.findIndex((s) => s.def.id === 'pistol')
+    if (pistolIdx >= 0) {
+      this.activeIdx = pistolIdx
+    } else {
+      this.downedTemp = new WeaponInstance(WEAPONS.pistol)
+      this.downedTemp.reserve = 16
+      this.camera.add(this.downedTemp.viewmodel)
+      this.slots.push(this.downedTemp)
+      this.activeIdx = this.slots.length - 1
+    }
+    this.syncVisibility()
+  }
+
+  exitDowned() {
+    if (!this.downedMode) return
+    this.downedMode = false
+    this.cancelReload()
+    if (this.downedTemp) {
+      this.camera.remove(this.downedTemp.viewmodel)
+      this.slots.pop()
+      this.downedTemp = null
+    }
+    this.activeIdx = Math.min(this.stashedIdx ?? 0, this.slots.length - 1)
+    this.stashedIdx = null
+    this.syncVisibility()
   }
 
   get active(): WeaponInstance {
@@ -200,7 +236,7 @@ export class WeaponSystem {
   }
 
   switchNext() {
-    if (this.slots.length < 2) return
+    if (this.downedMode || this.slots.length < 2) return
     this.cancelReload()
     this.activeIdx = (this.activeIdx + 1) % this.slots.length
     this.kick = 0.6 // small raise animation

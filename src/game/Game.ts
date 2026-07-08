@@ -49,6 +49,8 @@ export class Game {
   private lobby: Lobby | null = null
   private pause = new PauseMenu()
   private paused = false
+  private wasDowned = false
+  private downNotified = new Set<string>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -374,6 +376,40 @@ export class Game {
     // host: openDoorIds() rides along in the next state broadcast
   }
 
+  /** Bannered alert + live screen-space REVIVE markers for downed teammates. */
+  private watchTeammates() {
+    if (this.netMode === 'solo') return
+    const markers: Array<{ id: string; sx: number; sy: number; dist: number }> = []
+    for (const [id, avatar] of this.remotePlayers) {
+      if (!avatar.down) {
+        this.downNotified.delete(id)
+        continue
+      }
+      if (!this.downNotified.has(id)) {
+        this.downNotified.add(id)
+        this.hud.banner('SURVIVOR DOWN — REVIVE THEM!', 2800)
+        audio.playerHurt()
+      }
+      const v = avatar.pos.clone()
+      v.y += 1.5
+      v.project(this.camera)
+      let sx = ((v.x + 1) / 2) * 100
+      let sy = ((1 - v.y) / 2) * 100
+      if (v.z > 1) {
+        // behind the camera — pin to the closest screen edge (projection flips)
+        sx = v.x > 0 ? 6 : 94
+        sy = 50
+      }
+      markers.push({
+        id,
+        sx: Math.min(94, Math.max(6, sx)),
+        sy: Math.min(90, Math.max(8, sy)),
+        dist: Math.round(this.player.pos.distanceTo(avatar.pos)),
+      })
+    }
+    this.hud.updateReviveMarkers(markers)
+  }
+
   private handleShopping() {
     if (this.handleRevive()) return
     if (this.handleDoors()) return
@@ -521,8 +557,14 @@ export class Game {
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
 
-      // shooting (disabled while downed or in the menu)
-      if (!this.player.downed && !this.paused) {
+      // downed players drop to their sidearm but keep fighting
+      if (this.player.downed !== this.wasDowned) {
+        this.wasDowned = this.player.downed
+        if (this.player.downed) this.weapon.enterDowned()
+        else this.weapon.exitDowned()
+      }
+
+      if (!this.paused) {
         const zombieTargets =
           this.netMode === 'client' ? this.remoteZombies.targets() : this.horde.targets()
         const targets = [...this.arena.colliderMeshes, ...zombieTargets]
@@ -562,11 +604,13 @@ export class Game {
             }
           }
         }
-        this.handleShopping()
+        if (!this.player.downed) this.handleShopping()
+        else this.hud.setPrompt(null)
       } else {
         this.hud.setPrompt(null)
       }
       this.economy.update(dt)
+      this.watchTeammates()
 
       // simulation: host & solo run the horde; clients interpolate
       if (this.netMode === 'client') {
