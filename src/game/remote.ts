@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { PlayerState, ZombieState } from '../net/room'
-import { buildZombieMeshExternal } from './zombie'
+import { buildZombieMeshExternal, MIDGET_SCALE } from './zombie'
 
 function makeNameTag(name: string): THREE.Sprite {
   const c = document.createElement('canvas')
@@ -109,7 +109,7 @@ export class RemoteZombieField {
       let rz = this.zombies.get(id)
       if (!rz) {
         const built = buildZombieMeshExternal(runner === 1, lum === 1)
-        if (midget === 1) built.group.scale.setScalar(0.25)
+        if (midget === 1) built.group.scale.setScalar(MIDGET_SCALE)
         built.group.position.set(x, 0, z)
         built.group.userData.zombieId = id
         this.scene.add(built.group)
@@ -164,10 +164,12 @@ export class RemoteZombieField {
     }
   }
 
-  /** Meshes for local hit-testing on the client. */
-  targets(): THREE.Object3D[] {
+  /** Meshes for local hit-testing on the client. `excludeId` skips one zombie (e.g. a midget latched onto the local player, which shouldn't body-block them). */
+  targets(excludeId?: number): THREE.Object3D[] {
     const out: THREE.Object3D[] = []
-    for (const rz of this.zombies.values()) if (rz.state !== 2) out.push(rz.group)
+    for (const [id, rz] of this.zombies) {
+      if (rz.state !== 2 && id !== excludeId) out.push(rz.group)
+    }
     return out
   }
 

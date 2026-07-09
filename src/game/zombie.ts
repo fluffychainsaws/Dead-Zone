@@ -10,7 +10,7 @@ const ATTACK_DAMAGE = 14
 // Midget Zombie: tiny, fragile, always dies to a headshot — but leaps from
 // medium range with a predicted (not tracking) trajectory and latches onto
 // the target's head, blocking their view until pried off.
-const MIDGET_SCALE = 0.25
+export const MIDGET_SCALE = 0.5
 const MIDGET_JUMP_MIN_RANGE = 3.0
 const MIDGET_JUMP_MAX_RANGE = 9.0
 const MIDGET_JUMP_DURATION = 0.55

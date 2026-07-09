@@ -901,6 +901,22 @@ export class Game {
         this.renderer.render(this.scene, this.camera)
         return
       }
+      // find whether a Midget Zombie is latched onto ME specifically (host/solo: real
+      // object; client: learned from the host's broadcast) — blocks fire/shop, halves
+      // movement speed, and excludes it from body-pushback (it's riding us, not colliding)
+      if (this.netMode === 'client') {
+        this.myLatchZombie = null
+      } else {
+        this.myLatchZombie =
+          this.horde.zombies.find(
+            (z) => z.isMidget && z.midgetPhase === 'latched' && z.latchedTargetId === 'self',
+          ) ?? null
+      }
+      const isLatched = this.myLatchZombie !== null || this.myLatchClientZid !== null
+      this.hud.setMidgetOverlay(isLatched)
+      if (isLatched && !this.wasLatched) audio.midgetLatch()
+      this.wasLatched = isLatched
+
       if (this.paused) {
         // discard buffered input so nothing fires or jerks on resume
         this.input.consumeLook()
@@ -919,14 +935,16 @@ export class Game {
           return
         }
       } else {
-        this.player.update(dt, this.input, this.arena.playerColliders)
+        this.player.update(dt, this.input, this.arena.playerColliders, isLatched)
         if (this.input.consumeLightToggle()) this.cycleLight()
       }
-      // the horde has mass — you can't wade through it
+      // the horde has mass — you can't wade through it (except a zombie latched onto us)
       const bodies =
         this.netMode === 'client'
-          ? this.remoteZombies.targets().map((t) => t.position)
-          : this.horde.zombies.filter((z) => z.alive).map((z) => z.group.position)
+          ? this.remoteZombies.targets(this.myLatchClientZid ?? undefined).map((t) => t.position)
+          : this.horde.zombies
+              .filter((z) => z.alive && z !== this.myLatchZombie)
+              .map((z) => z.group.position)
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
       this.updateVision()
@@ -938,21 +956,6 @@ export class Game {
         if (this.player.downed) this.weapon.enterDowned()
         else this.weapon.exitDowned()
       }
-
-      // find whether a Midget Zombie is latched onto ME specifically (host/solo: real
-      // object; client: learned from the host's broadcast) — blocks fire/shop, not movement
-      if (this.netMode === 'client') {
-        this.myLatchZombie = null
-      } else {
-        this.myLatchZombie =
-          this.horde.zombies.find(
-            (z) => z.isMidget && z.midgetPhase === 'latched' && z.latchedTargetId === 'self',
-          ) ?? null
-      }
-      const isLatched = this.myLatchZombie !== null || this.myLatchClientZid !== null
-      this.hud.setMidgetOverlay(isLatched)
-      if (isLatched && !this.wasLatched) audio.midgetLatch()
-      this.wasLatched = isLatched
 
       if (!this.paused && isLatched) {
         // both hands are busy prying it off — no shooting, no shopping, melee = pry

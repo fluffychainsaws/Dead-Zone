@@ -68,7 +68,7 @@ export class Player {
     return this.time - this.lastHitAt < 0.35
   }
 
-  update(dt: number, input: Input, colliders: Collider[]) {
+  update(dt: number, input: Input, colliders: Collider[], slowed = false) {
     if (!this.alive) return
     this.time += dt
     if (
@@ -114,11 +114,12 @@ export class Player {
     this.crouchT += ((this.crouched ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
 
     const move = input.moveVec()
-    const speed = this.crouched
-      ? CROUCH_SPEED
-      : input.sprint && move.z > 0.3
-        ? SPRINT_SPEED
-        : WALK_SPEED
+    const speed =
+      (this.crouched
+        ? CROUCH_SPEED
+        : input.sprint && move.z > 0.3
+          ? SPRINT_SPEED
+          : WALK_SPEED) * (slowed ? 0.5 : 1)
     const sin = Math.sin(this.yaw)
     const cos = Math.cos(this.yaw)
     // forward is -z in camera space
