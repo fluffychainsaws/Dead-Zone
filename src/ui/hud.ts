@@ -50,7 +50,7 @@ export class Hud {
       <div id="hint">${
         isTouch
           ? 'Left: move · Right: aim · Hold FIRE · ADS to zoom'
-          : 'WASD move · Shift sprint · Right-click ADS · Space jump/vault · C crouch · V melee · R reload'
+          : 'WASD move · Shift sprint · Right-click ADS · Space jump/vault · Ctrl crouch · V melee · R reload'
       }</div>
       <div id="game-over">
         <h2>YOU DIED</h2>

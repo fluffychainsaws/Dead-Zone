@@ -136,10 +136,7 @@ export class Input {
       if (e.code === 'KeyQ' || e.code === 'Digit1' || e.code === 'Digit2')
         this.switchPresses++
       if (e.code === 'Space') this.jumpPresses++
-      // Ctrl is deliberately excluded: holding it can make the browser/OS release
-      // pointer lock (anti-clickjacking / accessibility prompts), which looked like
-      // the whole game closing.
-      if (e.code === 'KeyC') this.crouchPresses++
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.crouchPresses++
       if (e.code === 'KeyV') this.meleePresses++
       if (e.code === 'KeyT') this.lightPresses++
     })
