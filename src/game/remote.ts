@@ -1,6 +1,12 @@
 import * as THREE from 'three'
 import type { PlayerState, ZombieState } from '../net/room'
-import { buildZombieMeshExternal, MIDGET_SCALE, JUGGERNAUT_SCALE } from './zombie'
+import {
+  buildZombieMeshExternal,
+  MIDGET_SCALE,
+  JUGGERNAUT_SCALE,
+  ZUGGERNAUT_SCALE,
+  ZUGGERNAUT_RESURRECT_TIME,
+} from './zombie'
 
 function makeNameTag(name: string): THREE.Sprite {
   const c = document.createElement('canvas')
@@ -88,6 +94,7 @@ interface RemoteZombie {
   midget: boolean
   luminescent: boolean
   juggernaut: boolean
+  zuggernaut: boolean
   animT: number
   deathT: number
   parts: ReturnType<typeof buildZombieMeshExternal>['parts']
@@ -105,13 +112,20 @@ export class RemoteZombieField {
   /** Reconcile against the authoritative list from the host. */
   applyState(list: ZombieState[]) {
     const seen = new Set<number>()
-    for (const [id, x, z, ry, state, runner, midget, lum, jug] of list) {
+    for (const [id, x, z, ry, state, runner, midget, lum, jug, zug] of list) {
       seen.add(id)
       let rz = this.zombies.get(id)
+      // an evolved Zuggernaut keeps its id but needs a whole new mesh — rebuild it
+      // exactly like the host's evolveIntoZuggernaut() does
+      if (rz && rz.zuggernaut !== (zug === 1)) {
+        this.scene.remove(rz.group)
+        rz = undefined
+      }
       if (!rz) {
-        const built = buildZombieMeshExternal(runner === 1, lum === 1, jug === 1)
+        const built = buildZombieMeshExternal(runner === 1, lum === 1, jug === 1, zug === 1)
         if (midget === 1) built.group.scale.setScalar(MIDGET_SCALE)
         if (jug === 1) built.group.scale.setScalar(JUGGERNAUT_SCALE)
+        if (zug === 1) built.group.scale.setScalar(ZUGGERNAUT_SCALE)
         built.group.position.set(x, 0, z)
         built.group.userData.zombieId = id
         this.scene.add(built.group)
@@ -125,6 +139,7 @@ export class RemoteZombieField {
           midget: midget === 1,
           luminescent: lum === 1,
           juggernaut: jug === 1,
+          zuggernaut: zug === 1,
           animT: Math.random() * 10,
           deathT: 0,
           parts: built.parts,
@@ -152,12 +167,27 @@ export class RemoteZombieField {
         rz.group.rotation.x = -Math.min(1, rz.deathT / 0.35) * (Math.PI / 2)
         continue
       }
+      if (rz.state === 3) {
+        // resurrecting into a Zuggernaut: lying in blood, then rising back up
+        rz.deathT += dt
+        const t = rz.deathT / ZUGGERNAUT_RESURRECT_TIME
+        const lying = -Math.PI / 2
+        rz.group.rotation.x = t < 0.5 ? lying : lying * (1 - (t - 0.5) / 0.5)
+        continue
+      }
       const k = Math.min(1, dt * 10)
       rz.group.position.lerp(rz.targetPos, k)
       let d = rz.targetRy - rz.group.rotation.y
       while (d > Math.PI) d -= Math.PI * 2
       while (d < -Math.PI) d += Math.PI * 2
       rz.group.rotation.y += d * k
+      if (rz.zuggernaut) {
+        const mats = rz.group.userData.pulseMats as THREE.MeshLambertMaterial[] | undefined
+        if (mats) {
+          const pulse = 0.55 + Math.sin(rz.animT * 3.2) * 0.4
+          for (const m of mats) m.emissiveIntensity = pulse
+        }
+      }
       // shamble animation (client-side cosmetic)
       rz.animT += dt * (rz.runner ? 2.4 : 1.0)
       const swing = Math.sin(rz.animT * (rz.runner ? 7 : 4.4))
@@ -167,13 +197,21 @@ export class RemoteZombieField {
     }
   }
 
-  /** Meshes for local hit-testing on the client. `excludeId` skips one zombie (e.g. a midget latched onto the local player, which shouldn't body-block them). */
-  targets(excludeId?: number): THREE.Object3D[] {
+  /** Meshes for local hit-testing on the client. `excludeIds` skips zombies that
+   *  shouldn't body-block the local player (a midget latched onto them, a
+   *  zuggernaut holding them) — they're riding/carrying the player, not colliding. */
+  targets(...excludeIds: Array<number | undefined>): THREE.Object3D[] {
     const out: THREE.Object3D[] = []
     for (const [id, rz] of this.zombies) {
-      if (rz.state !== 2 && id !== excludeId) out.push(rz.group)
+      if (rz.state !== 2 && rz.state !== 3 && !excludeIds.includes(id)) out.push(rz.group)
     }
     return out
+  }
+
+  /** World position of a tracked zombie, if any — used to pin a grabbed local
+   *  player to the Zuggernaut holding them. */
+  posOf(id: number): THREE.Vector3 | null {
+    return this.zombies.get(id)?.group.position ?? null
   }
 
   /** Host migration: hand the last-known horde layout to a newly-promoted host. */
@@ -184,6 +222,7 @@ export class RemoteZombieField {
     midget: boolean
     luminescent: boolean
     juggernaut: boolean
+    zuggernaut: boolean
     dying: boolean
   }> {
     return [...this.zombies.values()].map((rz) => ({
@@ -193,7 +232,8 @@ export class RemoteZombieField {
       midget: rz.midget,
       luminescent: rz.luminescent,
       juggernaut: rz.juggernaut,
-      dying: rz.state === 2,
+      zuggernaut: rz.zuggernaut,
+      dying: rz.state === 2 || rz.state === 3,
     }))
   }
 

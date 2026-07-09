@@ -9,7 +9,7 @@ const SPAWN_INTERVAL = 1.1
 const BASE_MAX_ALIVE = 22
 const RUNNER_START_WAVE = 6 // no runners at all before this
 const MIDGET_START_WAVE = 4
-const JUGGERNAUT_START_WAVE = 6
+const JUGGERNAUT_START_WAVE = 1
 
 export interface WaveEvents {
   onWaveStart?: (wave: number) => void
@@ -42,8 +42,9 @@ export class Horde {
     wave = 1,
     luminescent = false,
     isJuggernaut = false,
+    isZuggernaut = false,
   ): Zombie {
-    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave, luminescent, isJuggernaut)
+    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave, luminescent, isJuggernaut, isZuggernaut)
     this.zombies.push(z)
     return z
   }
@@ -52,6 +53,9 @@ export class Horde {
   update(dt: number, targets: TargetInfo[], nav: ZombieNav): Record<string, number> {
     const damage: Record<string, number> = {}
     for (const z of this.zombies) {
+      // a zombie can be consumed mid-frame (e.g. a Zuggernaut grabbing it as a
+      // projectile) — don't let it also run its own update this same tick
+      if (z.dead) continue
       const hit = z.update(dt, targets, nav, this.zombies)
       if (hit) damage[hit.targetId] = (damage[hit.targetId] ?? 0) + hit.damage
     }

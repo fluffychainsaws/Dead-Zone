@@ -15,9 +15,11 @@ import {
   type PlayerState,
   type ShotFxMsg,
   type MidgetLatch,
+  type GrabInfo,
 } from '../net/room'
 import { Lobby, shortName } from '../net/lobby'
 import type { TargetInfo, Zombie } from './zombie'
+import { ZUGGERNAUT_STUN_TIME } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
 import { PauseMenu } from '../ui/pause'
@@ -90,6 +92,11 @@ export class Game {
   private myLatchZombie: Zombie | null = null // solo/host: the real Zombie object latched onto me
   private myLatchClientZid: number | null = null // client: id of the zombie latched onto me (via wire)
   private wasLatched = false
+
+  // --- zuggernaut grab state ---
+  private myGrabZombie: Zombie | null = null // solo/host: the real Zombie object holding me
+  private myGrabClientZid: number | null = null // client: id of the zombie holding me (via wire)
+  private wasGrabbed = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -391,11 +398,12 @@ export class Game {
     this.waves.setPlayerCount((this.net?.peers().length ?? 0) + 1)
     for (const z of this.remoteZombies.snapshot()) {
       if (z.dying) continue // don't resurrect a zombie mid-death animation
-      const hp = z.juggernaut
-        ? this.waves.zombieHp(wave) * 5
-        : z.midget
-          ? Math.round(this.waves.zombieHp(wave) / 2)
-          : this.waves.zombieHp(wave)
+      const hp =
+        z.juggernaut || z.zuggernaut
+          ? this.waves.zombieHp(wave) * 5
+          : z.midget
+            ? Math.round(this.waves.zombieHp(wave) / 2)
+            : this.waves.zombieHp(wave)
       this.horde.spawn(
         new THREE.Vector3(z.x, 0, z.z),
         hp,
@@ -404,6 +412,7 @@ export class Game {
         wave,
         z.luminescent,
         z.juggernaut,
+        z.zuggernaut,
       )
     }
     this.remoteZombies.clear()
@@ -567,6 +576,8 @@ export class Game {
     this.remoteZombies.applyState(s.z)
     const myLatch = (s.mg ?? []).find(([, targetId]) => targetId === selfId)
     this.myLatchClientZid = myLatch ? myLatch[0] : null
+    const myGrab = (s.gr ?? []).find(([, targetId]) => targetId === selfId)
+    this.myGrabClientZid = myGrab ? myGrab[0] : null
     for (const [pid, ps] of Object.entries(s.p)) {
       if (pid === selfId) continue
       // host relays every player's state (including its own under hostId)
@@ -932,11 +943,15 @@ export class Game {
     }
     // host: broadcast the world
     const latches: MidgetLatch[] = []
+    const grabs: GrabInfo[] = []
     for (const z of this.horde.zombies) {
       if (z.isMidget && z.midgetPhase === 'latched' && z.latchedTargetId) {
         // 'self' means the host's own player — translate to the host's real peer id
         // so remote clients (who only know peer ids) can recognize their own target
         latches.push([z.id, z.latchedTargetId === 'self' ? selfId : z.latchedTargetId])
+      }
+      if (z.isZuggernaut && z.zuggernautPhase === 'grabbing' && z.grabTargetId) {
+        grabs.push([z.id, z.grabTargetId === 'self' ? selfId : z.grabTargetId])
       }
     }
     const state: GameState = {
@@ -949,15 +964,17 @@ export class Game {
           Number(z.group.position.x.toFixed(2)),
           Number(z.group.position.z.toFixed(2)),
           Number(z.group.rotation.y.toFixed(2)),
-          z.state === 'dying' ? 2 : z.state === 'attacking' ? 1 : 0,
+          z.state === 'dying' ? 2 : z.state === 'resurrecting' ? 3 : z.state === 'attacking' ? 1 : 0,
           z.runner ? 1 : 0,
           z.isMidget ? 1 : 0,
           z.luminescent ? 1 : 0,
           z.isJuggernaut ? 1 : 0,
+          z.isZuggernaut ? 1 : 0,
         ]),
       p: { ...Object.fromEntries(this.peerStates), host: self },
       d: this.arena.openDoorIds(),
       mg: latches,
+      gr: grabs,
     }
     this.net.sendState(state)
   }
@@ -1000,6 +1017,21 @@ export class Game {
       if (isLatched && !this.wasLatched) audio.midgetLatch()
       this.wasLatched = isLatched
 
+      // same idea for a Zuggernaut currently holding ME — position gets pinned to it
+      // below, but unlike a midget latch, shooting still works while grabbed
+      if (this.netMode === 'client') {
+        this.myGrabZombie = null
+      } else {
+        this.myGrabZombie =
+          this.horde.zombies.find(
+            (z) => z.isZuggernaut && z.zuggernautPhase === 'grabbing' && z.grabTargetId === 'self',
+          ) ?? null
+      }
+      const isGrabbed = this.myGrabZombie !== null || this.myGrabClientZid !== null
+      if (isGrabbed && !this.wasGrabbed) audio.zuggernautGrab()
+      if (!isGrabbed && this.wasGrabbed) this.player.stunT = ZUGGERNAUT_STUN_TIME
+      this.wasGrabbed = isGrabbed
+
       if (this.paused) {
         // discard buffered input so nothing fires or jerks on resume
         this.input.consumeLook()
@@ -1018,15 +1050,28 @@ export class Game {
           return
         }
       } else {
-        this.player.update(dt, this.input, this.arena.playerColliders, isLatched)
+        this.player.update(dt, this.input, this.arena.playerColliders, isLatched, isGrabbed)
         if (this.input.consumeLightToggle()) this.cycleLight()
       }
-      // the horde has mass — you can't wade through it (except a zombie latched onto us)
+      // pin a grabbed player's position to whatever's holding them, every frame,
+      // same idea as a latched midget pinning itself to its host
+      if (isGrabbed) {
+        const holderPos =
+          this.netMode === 'client'
+            ? this.myGrabClientZid !== null
+              ? this.remoteZombies.posOf(this.myGrabClientZid)
+              : null
+            : (this.myGrabZombie?.group.position ?? null)
+        if (holderPos) this.player.pos.set(holderPos.x, 1.6, holderPos.z)
+      }
+      // the horde has mass — you can't wade through it (except a zombie latched onto or grabbing us)
       const bodies =
         this.netMode === 'client'
-          ? this.remoteZombies.targets(this.myLatchClientZid ?? undefined).map((t) => t.position)
+          ? this.remoteZombies
+              .targets(this.myLatchClientZid ?? undefined, this.myGrabClientZid ?? undefined)
+              .map((t) => t.position)
           : this.horde.zombies
-              .filter((z) => z.alive && z !== this.myLatchZombie)
+              .filter((z) => z.alive && z !== this.myLatchZombie && z !== this.myGrabZombie)
               .map((z) => z.group.position)
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
@@ -1101,9 +1146,14 @@ export class Game {
           })
         }
         this.meleeCooldown = Math.max(0, this.meleeCooldown - dt)
-        this.handleMelee()
-        if (!this.player.downed) this.handleShopping()
-        else this.hud.setPrompt(null)
+        if (isGrabbed) {
+          // held aloft — arms are pinned, no melee/shopping, but still free to shoot
+          this.hud.setPrompt(null)
+        } else {
+          this.handleMelee()
+          if (!this.player.downed) this.handleShopping()
+          else this.hud.setPrompt(null)
+        }
       } else {
         this.hud.setPrompt(null)
       }
@@ -1145,6 +1195,21 @@ export class Game {
         const damage = this.horde.update(dt, targetInfos, this.zombieNav())
         for (const z of this.horde.zombies) if (z.justJumped) audio.midgetScreech()
         for (const z of this.horde.zombies) if (z.justStartedCharge) audio.juggernautYell()
+        for (const z of this.horde.zombies) {
+          if (!z.justStartedResurrect) continue
+          audio.zuggernautRoar()
+          const at = z.group.position
+          for (let i = 0; i < 10; i++) {
+            this.effects.impact(
+              new THREE.Vector3(
+                at.x + (Math.random() - 0.5) * 1.2,
+                0.2 + Math.random() * 0.6,
+                at.z + (Math.random() - 0.5) * 1.2,
+              ),
+              'blood',
+            )
+          }
+        }
         if (damage['self']) {
           this.player.takeDamage(damage['self'])
           audio.playerHurt()

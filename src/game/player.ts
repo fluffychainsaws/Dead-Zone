@@ -37,6 +37,8 @@ export class Player {
   downed = false
   grounded = true
   crouched = false
+  /** Seconds left immobile after being thrown by a Zuggernaut — look still works. */
+  stunT = 0
 
   private velY = 0
   private bobT = 0
@@ -68,7 +70,7 @@ export class Player {
     return this.time - this.lastHitAt < 0.35
   }
 
-  update(dt: number, input: Input, colliders: Collider[], slowed = false) {
+  update(dt: number, input: Input, colliders: Collider[], slowed = false, grabbed = false) {
     if (!this.alive) return
     this.time += dt
     if (
@@ -86,6 +88,17 @@ export class Player {
       input.consumeJump()
       input.consumeCrouch()
       return // can look around while waiting for a revive, not move
+    }
+    if (this.stunT > 0) {
+      this.stunT = Math.max(0, this.stunT - dt)
+      input.consumeJump()
+      input.consumeCrouch()
+      return // thrown and dazed — can still look around, can't move
+    }
+    if (grabbed) {
+      input.consumeJump()
+      input.consumeCrouch()
+      return // held aloft by a Zuggernaut — Game.ts pins the position; look still works
     }
 
     if (this.vaulting) {

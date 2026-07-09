@@ -1,6 +1,17 @@
 import * as THREE from 'three'
 import type { Collider } from './arena'
 
+/** Frees geometry/materials for a zombie mesh being replaced or thrown away. */
+function disposeZombieMesh(g: THREE.Group) {
+  g.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.geometry.dispose()
+      if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose())
+      else o.material.dispose()
+    }
+  })
+}
+
 const RADIUS = 0.38
 const ATTACK_RANGE = 1.45
 const ATTACK_WINDUP = 0.45
@@ -37,9 +48,37 @@ const JUGGERNAUT_CHARGE_DAMAGE = 60
 const JUGGERNAUT_CHARGE_CONTACT_RADIUS = 1.1
 const JUGGERNAUT_CHARGE_COOLDOWN = 5.5
 
-export type ZombieState = 'chasing' | 'attacking' | 'dying'
+// Zuggernaut Zombie: a normal zombie has a chance to rise back up as one of these
+// after it dies — a roar, a burst of blood, and it slowly stands up transformed.
+// Taller than the Juggernaut, pulses red, runs at full runner speed (no charge),
+// and instead grabs its target for a few seconds before throwing them — and can
+// also grab a nearby ordinary zombie and hurl it at you from range.
+export const ZUGGERNAUT_SCALE = 2.05 // taller than the Juggernaut's 1.7
+export const ZUGGERNAUT_EVOLVE_CHANCE = 0.9
+export const ZUGGERNAUT_RESURRECT_TIME = 2.6 // lying in blood, then rising
+const ZUGGERNAUT_GRAB_RANGE = 1.6
+export const ZUGGERNAUT_GRAB_DURATION = 4.0
+export const ZUGGERNAUT_THROW_DAMAGE = 75 // 3/4 of a full-health player's HP
+export const ZUGGERNAUT_STUN_TIME = 1.0
+const ZUGGERNAUT_GRAB_COOLDOWN = 7.0
+const ZUGGERNAUT_ZOMBIE_GRAB_RADIUS = 2.2 // how close a fodder zombie must be to get grabbed
+const ZUGGERNAUT_ZOMBIE_THROW_MIN_RANGE = 4
+const ZUGGERNAUT_ZOMBIE_THROW_MAX_RANGE = 16
+const ZUGGERNAUT_ZOMBIE_THROW_DURATION = 0.6
+const ZUGGERNAUT_ZOMBIE_THROW_DAMAGE = 22
+const ZUGGERNAUT_ZOMBIE_THROW_CONTACT_RADIUS = 1.3
+const ZUGGERNAUT_ZOMBIE_THROW_COOLDOWN = 4.5
+
+export type ZombieState = 'chasing' | 'attacking' | 'dying' | 'resurrecting'
 export type MidgetPhase = 'ground' | 'jumping' | 'latched'
 export type JuggernautPhase = 'ground' | 'winding' | 'charging'
+export type ZuggernautPhase = 'ground' | 'grabbing' | 'throwingZombie'
+
+/** Mirrors WaveSystem.zombieHp() — Zombie has no reference to WaveSystem, so the
+ *  wave-scaled HP formula is duplicated here for the evolve-into-Zuggernaut case. */
+function zombieHpForWave(wave: number): number {
+  return Math.round(60 * (1 + 0.17 * (wave - 1)))
+}
 
 export interface TargetInfo {
   id: string
@@ -80,6 +119,7 @@ export class Zombie {
   runner: boolean
   isMidget: boolean
   isJuggernaut: boolean
+  isZuggernaut: boolean
   luminescent: boolean
   state: ZombieState = 'chasing'
   dead = false // fully finished (despawn)
@@ -94,6 +134,12 @@ export class Zombie {
   juggernautPhase: JuggernautPhase = 'ground'
   /** True for the one frame a windup starts — Game.ts checks this to trigger the yell. */
   justStartedCharge = false
+
+  // zuggernaut-only state
+  zuggernautPhase: ZuggernautPhase = 'ground'
+  grabTargetId: string | null = null
+  /** True for the one frame a normal zombie starts rising back up as a Zuggernaut. */
+  justStartedResurrect = false
 
   private parts: Parts
   private animT = Math.random() * 10
@@ -125,6 +171,18 @@ export class Zombie {
   private chargeDirZ = 0
   private chargeHitIds = new Set<string>() // don't double-hit the same target mid-charge
 
+  // zuggernaut grab/throw internals
+  private spawnWave = 1
+  private grabCooldown = 0.5 + Math.random() * 1.5
+  private grabT = 0
+  private throwCooldown = 1 + Math.random() * 2
+  private throwT = 0
+  private throwStartX = 0
+  private throwStartZ = 0
+  private throwTargetX = 0
+  private throwTargetZ = 0
+  private thrownProjectile: THREE.Group | null = null
+
   constructor(
     scene: THREE.Scene,
     pos: THREE.Vector3,
@@ -134,6 +192,7 @@ export class Zombie {
     wave = 1,
     luminescent = false,
     isJuggernaut = false,
+    isZuggernaut = false,
   ) {
     this.scene = scene
     this.hp = hp
@@ -141,8 +200,13 @@ export class Zombie {
     this.runner = runner
     this.isMidget = isMidget
     this.isJuggernaut = isJuggernaut
+    this.isZuggernaut = isZuggernaut
     this.luminescent = luminescent
-    if (isJuggernaut) {
+    this.spawnWave = wave
+    if (isZuggernaut) {
+      // runs like a fast zombie — same formula as a runner
+      this.speed = Math.min(3.6 + Math.max(0, wave - 5) * 0.12, 5.2) + Math.random() * 0.3
+    } else if (isJuggernaut) {
       this.speed = JUGGERNAUT_SPEED
     } else if (isMidget) {
       this.speed = 2.4 + Math.random() * 0.5 // ground-scuttle speed between jumps
@@ -152,25 +216,38 @@ export class Zombie {
     } else {
       this.speed = 1.5 + Math.random() * 0.7
     }
-    const { group, parts } = buildZombieMesh(runner, luminescent, isJuggernaut)
+    const { group, parts } = buildZombieMesh(runner, luminescent, isJuggernaut, isZuggernaut)
     this.group = group
     this.parts = parts
     if (isMidget) group.scale.setScalar(MIDGET_SCALE)
     if (isJuggernaut) group.scale.setScalar(JUGGERNAUT_SCALE)
+    if (isZuggernaut) group.scale.setScalar(ZUGGERNAUT_SCALE)
     group.position.copy(pos)
     group.userData.zombie = this
     scene.add(group)
   }
 
   get alive(): boolean {
-    return this.state !== 'dying'
+    return this.state !== 'dying' && this.state !== 'resurrecting'
   }
 
-  /** Apply damage; returns true if this hit killed it. */
+  /** True for plain zombies only — the only kind that can evolve or get thrown. */
+  get isPlain(): boolean {
+    return !this.isMidget && !this.isJuggernaut && !this.isZuggernaut
+  }
+
+  /** Apply damage; returns true if this hit killed it. A plain zombie has a chance
+   *  to rise back up as a Zuggernaut instead of dying outright. */
   damage(amount: number): boolean {
     if (!this.alive) return false
     this.hp -= amount
     if (this.hp <= 0) {
+      if (this.isPlain && Math.random() < ZUGGERNAUT_EVOLVE_CHANCE) {
+        this.state = 'resurrecting'
+        this.deathT = 0
+        this.justStartedResurrect = true
+        return true
+      }
       this.state = 'dying'
       this.deathT = 0
       if (this.midgetPhase === 'latched') this.detach()
@@ -228,6 +305,7 @@ export class Zombie {
   ): AttackResult | null {
     this.justJumped = false
     this.justStartedCharge = false
+    this.justStartedResurrect = false
     if (this.state === 'dying') {
       this.deathT += dt
       // fall over, then sink
@@ -239,8 +317,25 @@ export class Zombie {
       }
       return null
     }
+    if (this.state === 'resurrecting') {
+      this.deathT += dt
+      const t = this.deathT / ZUGGERNAUT_RESURRECT_TIME
+      // lying flat in the blood for the first half, then rising back up
+      const lying = -Math.PI / 2
+      this.group.rotation.x = t < 0.5 ? lying : lying * (1 - (t - 0.5) / 0.5)
+      if (t >= 1) this.evolveIntoZuggernaut()
+      return null
+    }
 
-    this.animT += dt * (this.runner ? 2.4 : 1.0)
+    this.animT += dt * (this.runner || this.isZuggernaut ? 2.4 : 1.0)
+    if (this.isZuggernaut) {
+      // slow pulsing red glow
+      const mats = this.group.userData.pulseMats as THREE.MeshLambertMaterial[] | undefined
+      if (mats) {
+        const pulse = 0.55 + Math.sin(this.animT * 3.2) * 0.4
+        for (const m of mats) m.emissiveIntensity = pulse
+      }
+    }
     const pos = this.group.position
 
     // nearest target
@@ -261,6 +356,10 @@ export class Zombie {
     if (this.isJuggernaut) {
       if (this.juggernautPhase === 'winding') return this.updateWinding(dt, target)
       if (this.juggernautPhase === 'charging') return this.updateCharging(dt, targets, nav)
+    }
+    if (this.isZuggernaut) {
+      if (this.zuggernautPhase === 'grabbing') return this.updateGrabbing(dt)
+      if (this.zuggernautPhase === 'throwingZombie') return this.updateThrowingZombie(dt, targets)
     }
 
     if (!target) return null
@@ -296,6 +395,35 @@ export class Zombie {
       return null
     }
     if (this.isJuggernaut) this.chargeCooldown = Math.max(0, this.chargeCooldown - dt)
+
+    if (this.isZuggernaut && this.grabCooldown <= 0 && dist <= ZUGGERNAUT_GRAB_RANGE) {
+      this.zuggernautPhase = 'grabbing'
+      this.grabT = 0
+      this.grabTargetId = target.id
+      this.state = 'attacking'
+      return null
+    }
+    if (this.isZuggernaut) this.grabCooldown = Math.max(0, this.grabCooldown - dt)
+
+    if (
+      this.isZuggernaut &&
+      this.throwCooldown <= 0 &&
+      dist >= ZUGGERNAUT_ZOMBIE_THROW_MIN_RANGE &&
+      dist <= ZUGGERNAUT_ZOMBIE_THROW_MAX_RANGE
+    ) {
+      const fodder = others.find(
+        (o) =>
+          o !== this &&
+          o.alive &&
+          o.isPlain &&
+          Math.hypot(o.group.position.x - pos.x, o.group.position.z - pos.z) <= ZUGGERNAUT_ZOMBIE_GRAB_RADIUS,
+      )
+      if (fodder) {
+        this.startThrowZombie(fodder, target)
+        return null
+      }
+    }
+    if (this.isZuggernaut) this.throwCooldown = Math.max(0, this.throwCooldown - dt)
 
     let dealt = 0
     if (dist < ATTACK_RANGE || this.state === 'attacking') {
@@ -467,6 +595,102 @@ export class Zombie {
     return this.latchedTargetId ? { targetId: this.latchedTargetId, damage: MIDGET_LATCH_DAMAGE } : null
   }
 
+  /** Rebuilds this zombie in-place as a Zuggernaut — same id, same instance, new mesh. */
+  private evolveIntoZuggernaut() {
+    const at = this.group.position.clone()
+    this.scene.remove(this.group)
+    disposeZombieMesh(this.group)
+
+    this.isZuggernaut = true
+    this.isMidget = false
+    this.isJuggernaut = false
+    this.runner = true
+    this.hp = zombieHpForWave(this.spawnWave) * 5
+    this.maxHp = this.hp
+    this.speed = Math.min(3.6 + Math.max(0, this.spawnWave - 5) * 0.12, 5.2) + Math.random() * 0.3
+    this.state = 'chasing'
+    this.zuggernautPhase = 'ground'
+    this.grabCooldown = 1 + Math.random()
+    this.throwCooldown = 1 + Math.random() * 2
+
+    const { group, parts } = buildZombieMesh(true, false, false, true)
+    this.group = group
+    this.parts = parts
+    group.scale.setScalar(ZUGGERNAUT_SCALE)
+    group.position.copy(at)
+    group.userData.zombie = this
+    this.scene.add(group)
+  }
+
+  /** Holds its target aloft — Game.ts pins the grabbed player's position to this
+   *  zombie and still lets them shoot; only the final frame deals damage (a throw). */
+  private updateGrabbing(dt: number): AttackResult | null {
+    this.grabT += dt
+    const lift = Math.min(1, this.grabT / 0.3)
+    this.parts.armL.rotation.x = -Math.PI / 2 - lift * 1.0
+    this.parts.armR.rotation.x = -Math.PI / 2 - lift * 1.0
+    if (this.grabT < ZUGGERNAUT_GRAB_DURATION) return null
+    this.zuggernautPhase = 'ground'
+    this.grabCooldown = ZUGGERNAUT_GRAB_COOLDOWN
+    this.state = 'chasing'
+    const targetId = this.grabTargetId
+    this.grabTargetId = null
+    return targetId ? { targetId, damage: ZUGGERNAUT_THROW_DAMAGE } : null
+  }
+
+  /** Instantly consumes a nearby plain zombie and hurls its own mesh at the target
+   *  in a locked-in arc — a ranged option when the player is out of grab range. */
+  private startThrowZombie(fodder: Zombie, target: TargetInfo) {
+    this.zuggernautPhase = 'throwingZombie'
+    this.throwT = 0
+    this.throwStartX = this.group.position.x
+    this.throwStartZ = this.group.position.z
+    this.throwTargetX = target.pos.x
+    this.throwTargetZ = target.pos.z
+    this.thrownProjectile = fodder.group
+    this.thrownProjectile.position.set(this.throwStartX, 1.2, this.throwStartZ)
+    fodder.hp = 0
+    fodder.state = 'dying' // excludes it from Horde.targets() — can't be shot mid-flight
+    fodder.dead = true // and Horde skips its own update() this frame — we now own the mesh
+    this.state = 'attacking'
+  }
+
+  private updateThrowingZombie(dt: number, targets: TargetInfo[]): AttackResult | null {
+    this.throwT += dt
+    const t = Math.min(1, this.throwT / ZUGGERNAUT_ZOMBIE_THROW_DURATION)
+    if (this.thrownProjectile) {
+      const arc = Math.sin(Math.PI * t) * 1.6
+      this.thrownProjectile.position.set(
+        this.throwStartX + (this.throwTargetX - this.throwStartX) * t,
+        1.2 + arc,
+        this.throwStartZ + (this.throwTargetZ - this.throwStartZ) * t,
+      )
+      this.thrownProjectile.rotation.x += dt * 10
+    }
+    if (t < 1) return null
+
+    let result: AttackResult | null = null
+    if (this.thrownProjectile) {
+      for (const tt of targets) {
+        const d = Math.hypot(
+          tt.pos.x - this.thrownProjectile.position.x,
+          tt.pos.z - this.thrownProjectile.position.z,
+        )
+        if (d <= ZUGGERNAUT_ZOMBIE_THROW_CONTACT_RADIUS) {
+          result = { targetId: tt.id, damage: ZUGGERNAUT_ZOMBIE_THROW_DAMAGE }
+          break
+        }
+      }
+      this.scene.remove(this.thrownProjectile)
+      disposeZombieMesh(this.thrownProjectile)
+      this.thrownProjectile = null
+    }
+    this.zuggernautPhase = 'ground'
+    this.throwCooldown = ZUGGERNAUT_ZOMBIE_THROW_COOLDOWN
+    this.state = 'chasing'
+    return result
+  }
+
   /** Braced, roaring wind-up — telegraphs the charge direction long enough to dodge. */
   private updateWinding(dt: number, target: TargetInfo | null): AttackResult | null {
     if (target) {
@@ -568,32 +792,39 @@ export function buildZombieMeshExternal(
   runner: boolean,
   luminescent = false,
   juggernaut = false,
+  zuggernaut = false,
 ): { group: THREE.Group; parts: Parts } {
-  return buildZombieMesh(runner, luminescent, juggernaut)
+  return buildZombieMesh(runner, luminescent, juggernaut, zuggernaut)
 }
 
 function buildZombieMesh(
   runner: boolean,
   luminescent = false,
   juggernaut = false,
+  zuggernaut = false,
 ): { group: THREE.Group; parts: Parts } {
   const group = new THREE.Group()
-  // rotting skin: sickly green-grey, runners redder, juggernauts ash-grey; lab specimens glow in the dark
+  // rotting skin: sickly green-grey, runners redder, juggernauts ash-grey,
+  // zuggernauts a deep pulsing red; lab specimens glow in the dark
   const skin = new THREE.MeshLambertMaterial(
-    juggernaut
-      ? { color: 0x353030 }
-      : {
-          color: new THREE.Color().setHSL(
-            luminescent ? 0.42 : runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1,
-            0.35,
-            0.22 + Math.random() * 0.1,
-          ),
-        },
+    zuggernaut
+      ? { color: 0x200404 }
+      : juggernaut
+        ? { color: 0x353030 }
+        : {
+            color: new THREE.Color().setHSL(
+              luminescent ? 0.42 : runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1,
+              0.35,
+              0.22 + Math.random() * 0.1,
+            ),
+          },
   )
   const cloth = new THREE.MeshLambertMaterial(
-    juggernaut
-      ? { color: 0x2c0a0a }
-      : { color: new THREE.Color().setHSL(luminescent ? 0.5 : Math.random(), 0.2, 0.12 + Math.random() * 0.08) },
+    zuggernaut
+      ? { color: 0x140202 }
+      : juggernaut
+        ? { color: 0x2c0a0a }
+        : { color: new THREE.Color().setHSL(luminescent ? 0.5 : Math.random(), 0.2, 0.12 + Math.random() * 0.08) },
   )
   if (luminescent) {
     // emissive makes them self-lit — the only zombies you can see in the pitch-black Lab
@@ -602,10 +833,17 @@ function buildZombieMesh(
     cloth.emissive = new THREE.Color(0x1060ff)
     cloth.emissiveIntensity = 0.7
   }
+  if (zuggernaut) {
+    // base emissive — Zombie.update() pulses the intensity every frame
+    skin.emissive = new THREE.Color(0xff1010)
+    skin.emissiveIntensity = 0.6
+    cloth.emissive = new THREE.Color(0xdd0000)
+    cloth.emissiveIntensity = 0.5
+  }
 
-  // bulk multiplier fattens every limb for the juggernaut's hulking silhouette —
-  // the overall height comes from the caller's uniform group scale on top of this
-  const b = juggernaut ? 1.55 : 1
+  // bulk multiplier fattens every limb — juggernaut is squat and hulking, zuggernaut
+  // leaner but still broad; overall height comes from the caller's uniform group scale
+  const b = juggernaut ? 1.55 : zuggernaut ? 1.3 : 1
 
   const legGeo = new THREE.BoxGeometry(0.16 * b, 0.58, 0.16 * b)
   legGeo.translate(0, -0.29, 0)
@@ -620,15 +858,15 @@ function buildZombieMesh(
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.26 * b, 0.28 * b, 0.26 * b), skin)
   head.position.y = 1.34
   head.name = 'head'
-  // glowing eyes + slack mouth on the front face (+z = facing direction) — juggernauts always burn red
-  const eyeMat = new THREE.MeshBasicMaterial({ color: runner || juggernaut ? 0xff2a1a : 0xc8e04a })
+  // glowing eyes + slack mouth on the front face (+z = facing direction) — juggernauts/zuggernauts always burn red
+  const eyeMat = new THREE.MeshBasicMaterial({ color: runner || juggernaut || zuggernaut ? 0xff2a1a : 0xc8e04a })
   const eyeGeo = new THREE.BoxGeometry(0.055 * b, 0.045 * b, 0.02)
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
   eyeL.position.set(-0.062 * b, 0.045 * b, 0.132 * b)
   const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
   eyeR.position.set(0.062 * b, 0.045 * b, 0.132 * b)
   const mouth = new THREE.Mesh(
-    new THREE.BoxGeometry(0.13 * b, (runner || juggernaut ? 0.07 : 0.045) * b, 0.02),
+    new THREE.BoxGeometry(0.13 * b, (runner || juggernaut || zuggernaut ? 0.07 : 0.045) * b, 0.02),
     new THREE.MeshBasicMaterial({ color: 0x140404 }),
   )
   mouth.position.set(0, -0.075 * b, 0.132 * b)
@@ -644,5 +882,6 @@ function buildZombieMesh(
   armR.rotation.x = -Math.PI / 2
 
   group.add(legL, legR, torso, head, armL, armR)
+  if (zuggernaut) group.userData.pulseMats = [skin, cloth]
   return { group, parts: { head, armL, armR, legL, legR, torso } }
 }

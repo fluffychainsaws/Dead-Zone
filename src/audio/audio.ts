@@ -504,6 +504,54 @@ export class AudioEngine {
     this.noiseHit({ at: t, decay: dur, freq: 350, gain: 0.4 })
   }
 
+  /** A normal zombie's corpse roaring back to life as a Zuggernaut — louder, more
+   *  ragged than the Juggernaut's yell, with a wetter transient underneath. */
+  zuggernautRoar() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    const dur = 1.3
+    const o = ctx.createOscillator()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(70, t)
+    o.frequency.linearRampToValueAtTime(190, t + dur * 0.35)
+    o.frequency.linearRampToValueAtTime(55, t + dur)
+    const wob = ctx.createOscillator()
+    wob.frequency.value = 9
+    const wobGain = ctx.createGain()
+    wobGain.gain.value = 34
+    wob.connect(wobGain)
+    wobGain.connect(o.frequency)
+    const f = ctx.createBiquadFilter()
+    f.type = 'bandpass'
+    f.frequency.value = 420
+    f.Q.value = 1.4
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(1.0, t + dur * 0.2)
+    g.gain.setValueAtTime(1.0, t + dur * 0.75)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    o.connect(f)
+    f.connect(g)
+    this.route(g)
+    o.start(t)
+    o.stop(t + dur + 0.05)
+    wob.start(t)
+    wob.stop(t + dur + 0.05)
+    // a wet burst under the roar for the blood
+    this.noiseHit({ at: t, decay: 0.3, freq: 900, filterType: 'bandpass', gain: 0.5 })
+    this.noiseHit({ at: t + 0.05, decay: 0.5, freq: 300, gain: 0.55 })
+  }
+
+  /** A Zuggernaut snatching its target off the ground. */
+  zuggernautGrab() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    this.tone({ at: t, from: 300, to: 140, dur: 0.3, gain: 0.5, type: 'sawtooth' })
+    this.noiseHit({ at: t, decay: 0.2, freq: 700, gain: 0.5 })
+  }
+
   /** The startled moment a Midget Zombie lands and latches on. */
   midgetLatch() {
     const ctx = this.sfxReady()

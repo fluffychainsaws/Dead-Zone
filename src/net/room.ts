@@ -19,15 +19,19 @@ export type ZombieState = [
   x: number,
   z: number,
   ry: number,
-  state: 0 | 1 | 2, // 0 chasing, 1 attacking, 2 dying
+  state: 0 | 1 | 2 | 3, // 0 chasing, 1 attacking, 2 dying, 3 resurrecting
   runner: 0 | 1,
   midget: 0 | 1,
   lum: 0 | 1,
   jug: 0 | 1,
+  zug: 0 | 1,
 ]
 
 /** A midget currently latched onto someone's head: [zombie id, target id]. */
 export type MidgetLatch = [number, string]
+
+/** A Zuggernaut currently holding someone aloft: [zombie id, target id]. */
+export type GrabInfo = [number, string]
 
 export type GameState = {
   w: number // wave
@@ -36,6 +40,7 @@ export type GameState = {
   p: Record<string, PlayerState>
   d: number[] // opened door ids
   mg: MidgetLatch[]
+  gr: GrabInfo[]
 }
 
 export type ShotMsg = {
