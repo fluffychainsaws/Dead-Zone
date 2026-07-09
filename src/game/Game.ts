@@ -97,6 +97,10 @@ export class Game {
   private myGrabZombie: Zombie | null = null // solo/host: the real Zombie object holding me
   private myGrabClientZid: number | null = null // client: id of the zombie holding me (via wire)
   private wasGrabbed = false
+  // remembers the most recent grabber past the moment of release, so the throw
+  // knows which direction to launch the player in
+  private lastGrabZombie: Zombie | null = null
+  private lastGrabClientZid: number | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -1028,8 +1032,27 @@ export class Game {
           ) ?? null
       }
       const isGrabbed = this.myGrabZombie !== null || this.myGrabClientZid !== null
+      if (isGrabbed) {
+        this.lastGrabZombie = this.myGrabZombie
+        this.lastGrabClientZid = this.myGrabClientZid
+      }
       if (isGrabbed && !this.wasGrabbed) audio.zuggernautGrab()
-      if (!isGrabbed && this.wasGrabbed) this.player.stunT = ZUGGERNAUT_STUN_TIME
+      if (!isGrabbed && this.wasGrabbed) {
+        // thrown — launch 10-15ft in the direction the Zuggernaut was facing when it let go
+        const ry =
+          this.netMode === 'client'
+            ? this.lastGrabClientZid !== null
+              ? this.remoteZombies.rotationOf(this.lastGrabClientZid)
+              : null
+            : (this.lastGrabZombie?.group.rotation.y ?? null)
+        if (ry !== null) {
+          const dist = 3 + Math.random() * 1.6 // ~10-15ft
+          this.player.throwTo(Math.sin(ry), Math.cos(ry), dist, this.arena.playerColliders)
+        }
+        this.player.stunT = ZUGGERNAUT_STUN_TIME
+        this.lastGrabZombie = null
+        this.lastGrabClientZid = null
+      }
       this.wasGrabbed = isGrabbed
 
       if (this.paused) {

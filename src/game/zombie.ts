@@ -396,10 +396,18 @@ export class Zombie {
     }
     if (this.isJuggernaut) this.chargeCooldown = Math.max(0, this.chargeCooldown - dt)
 
-    if (this.isZuggernaut && this.grabCooldown <= 0 && dist <= ZUGGERNAUT_GRAB_RANGE) {
+    if (
+      this.isZuggernaut &&
+      this.grabCooldown <= 0 &&
+      dist <= ZUGGERNAUT_GRAB_RANGE &&
+      // a target already in another Zuggernaut's grip can't be snatched away
+      !others.some((o) => o !== this && o.isZuggernaut && o.zuggernautPhase === 'grabbing' && o.grabTargetId === target.id)
+    ) {
       this.zuggernautPhase = 'grabbing'
       this.grabT = 0
       this.grabTargetId = target.id
+      // facing at the moment of the grab is what the throw direction uses on release
+      this.group.rotation.y = Math.atan2(dx, dz)
       this.state = 'attacking'
       return null
     }

@@ -214,6 +214,12 @@ export class RemoteZombieField {
     return this.zombies.get(id)?.group.position ?? null
   }
 
+  /** Facing angle of a tracked zombie, if any — used as the throw direction when
+   *  a Zuggernaut releases a grabbed local player. */
+  rotationOf(id: number): number | null {
+    return this.zombies.get(id)?.group.rotation.y ?? null
+  }
+
   /** Host migration: hand the last-known horde layout to a newly-promoted host. */
   snapshot(): Array<{
     x: number

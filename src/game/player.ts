@@ -204,6 +204,15 @@ export class Player {
     }
   }
 
+  /** Launches the player dist units along (dirX, dirZ) — e.g. a Zuggernaut's throw —
+   *  then resolves against colliders so they don't end up inside a wall. */
+  throwTo(dirX: number, dirZ: number, dist: number, colliders: Collider[]) {
+    this.pos.x += dirX * dist
+    this.pos.z += dirZ * dist
+    this.resolve(colliders, 'x')
+    this.resolve(colliders, 'z')
+  }
+
   /** A collider blocks horizontally only if its top is above the player's feet. */
   private blocks(c: Collider): boolean {
     return (c.height ?? Infinity) > this.pos.y + 0.05
