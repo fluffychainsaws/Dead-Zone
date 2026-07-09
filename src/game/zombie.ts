@@ -82,6 +82,7 @@ export class Zombie {
   private stuckT = 0
   private sideStep = 0 // seconds of lateral escape left
   private sideSign = 1
+  private stuckCycles = 0 // consecutive failed strafe attempts — escalates to a hard unstick
   private hop = 0 // vault height, eased
 
   // midget jump/latch internals
@@ -307,11 +308,22 @@ export class Zombie {
         this.stuckT += dt
         if (this.stuckT > 1.0) {
           this.stuckT = 0
-          this.sideStep = 0.6
-          this.sideSign = Math.random() < 0.5 ? 1 : -1
+          this.stuckCycles++
+          if (this.stuckCycles >= 4) {
+            // several strafe attempts in a row went nowhere — genuinely wedged
+            // (e.g. against a collider that shouldn't be there). Snap straight to
+            // the current waypoint rather than let it rot in place forever.
+            pos.x = wp.x
+            pos.z = wp.z
+            this.stuckCycles = 0
+          } else {
+            this.sideStep = 0.6
+            this.sideSign = Math.random() < 0.5 ? 1 : -1
+          }
         }
       } else {
         this.stuckT = Math.max(0, this.stuckT - dt * 2)
+        this.stuckCycles = 0
       }
       this.lastPos.copy(pos)
 

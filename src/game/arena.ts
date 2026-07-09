@@ -72,6 +72,7 @@ const DOME_CX = -3
 const DOME_CZ = -50
 const DOME_R = 11
 const STAIR_X = -26 // stairwell gate + corridor centre
+const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point sits
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 
@@ -119,12 +120,16 @@ export class Arena {
     this.buildLights()
     this.buildLab()
     this.mergeStatics()
-    // invisible world edge so nobody sprints off into the fog (wraps jail + lab)
+    // invisible world edge so nobody sprints off into the fog (wraps jail + lab).
+    // Kept well clear of the lab's tunnel spawn points (LAB_Z0/LAB_X0 - TUNNEL_SPAWN_OFF) —
+    // this used to sit right on top of them, trapping freshly-spawned zombies against it.
+    const frameX0 = LAB_X0 - TUNNEL_SPAWN_OFF - 3
+    const frameZ0 = LAB_Z0 - TUNNEL_SPAWN_OFF - 3
     const bounds: Collider[] = [
-      { minX: LAB_X0 - 3, maxX: 44, minZ: LAB_Z0 - 3, maxZ: LAB_Z0 - 1 }, // far north
-      { minX: -44, maxX: 44, minZ: 34, maxZ: 36 }, // far south
-      { minX: -44, maxX: LAB_X0 - 1, minZ: LAB_Z0 - 3, maxZ: 36 }, // west
-      { minX: 42, maxX: 44, minZ: LAB_Z0 - 3, maxZ: 36 }, // east
+      { minX: frameX0, maxX: 44, minZ: frameZ0, maxZ: frameZ0 + 2 }, // far north
+      { minX: frameX0, maxX: 44, minZ: 34, maxZ: 36 }, // far south
+      { minX: frameX0, maxX: frameX0 + 2, minZ: frameZ0, maxZ: 36 }, // west
+      { minX: 42, maxX: 44, minZ: frameZ0, maxZ: 36 }, // east
     ]
     this.playerColliders.push(...bounds)
     this.zombieColliders.push(...bounds)
@@ -280,7 +285,7 @@ export class Arena {
     this.scene.add(glow)
 
     // spawn just outside the wall (in the tunnel), first waypoint just inside the lab
-    const off = 2.4
+    const off = TUNNEL_SPAWN_OFF
     const outward = isX
       ? new THREE.Vector3(at, 0, fixed + (fixed <= LAB_Z0 + T ? -off : off))
       : new THREE.Vector3(fixed + (fixed <= LAB_X0 + T ? -off : off), 0, at)
