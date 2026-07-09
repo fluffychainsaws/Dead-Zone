@@ -149,7 +149,11 @@ export class Game {
       this.lobby?.leave()
       location.reload()
     }
-    // Esc in pointer lock releases the lock — treat that as "open the menu"
+    // Esc in pointer lock releases the lock — treat that as "open the menu".
+    // Some browsers/OSes also silently release pointer lock while a modifier
+    // key (Ctrl, used for crouch) is held — that's not the player asking to
+    // pause, so if Ctrl is still down when the lock drops, just re-lock
+    // instead of popping the pause screen.
     document.addEventListener('pointerlockchange', () => {
       if (
         !document.pointerLockElement &&
@@ -157,6 +161,10 @@ export class Game {
         !this.input.isTouch &&
         !this.paused
       ) {
+        if (this.input.isDown('ControlLeft') || this.input.isDown('ControlRight')) {
+          this.input.requestLock()
+          return
+        }
         this.openPause()
       }
     })

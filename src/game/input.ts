@@ -125,6 +125,11 @@ export class Input {
     if (!this.isTouch && !this.locked) this.canvas.requestPointerLock()
   }
 
+  /** Is this key currently held? (desktop only — always false on touch). */
+  isDown(code: string): boolean {
+    return this.keys.has(code)
+  }
+
   // ---------------- desktop ----------------
 
   private bindDesktop() {
