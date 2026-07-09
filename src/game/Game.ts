@@ -391,8 +391,20 @@ export class Game {
     this.waves.setPlayerCount((this.net?.peers().length ?? 0) + 1)
     for (const z of this.remoteZombies.snapshot()) {
       if (z.dying) continue // don't resurrect a zombie mid-death animation
-      const hp = z.midget ? Math.round(this.waves.zombieHp(wave) / 2) : this.waves.zombieHp(wave)
-      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), hp, z.runner, z.midget, wave, z.luminescent)
+      const hp = z.juggernaut
+        ? this.waves.zombieHp(wave) * 5
+        : z.midget
+          ? Math.round(this.waves.zombieHp(wave) / 2)
+          : this.waves.zombieHp(wave)
+      this.horde.spawn(
+        new THREE.Vector3(z.x, 0, z.z),
+        hp,
+        z.runner,
+        z.midget,
+        wave,
+        z.luminescent,
+        z.juggernaut,
+      )
     }
     this.remoteZombies.clear()
     this.waves.resumeAt(this.clientWave, this.clientPhase)
@@ -941,6 +953,7 @@ export class Game {
           z.runner ? 1 : 0,
           z.isMidget ? 1 : 0,
           z.luminescent ? 1 : 0,
+          z.isJuggernaut ? 1 : 0,
         ]),
       p: { ...Object.fromEntries(this.peerStates), host: self },
       d: this.arena.openDoorIds(),
@@ -1131,6 +1144,7 @@ export class Game {
           targetInfos.push({ id: 'nobody', pos: this.player.pos })
         const damage = this.horde.update(dt, targetInfos, this.zombieNav())
         for (const z of this.horde.zombies) if (z.justJumped) audio.midgetScreech()
+        for (const z of this.horde.zombies) if (z.justStartedCharge) audio.juggernautYell()
         if (damage['self']) {
           this.player.takeDamage(damage['self'])
           audio.playerHurt()

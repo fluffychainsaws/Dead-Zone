@@ -560,6 +560,42 @@ export class Arena {
     this.scene.add(s)
   }
 
+  /** An oriented tapered cylinder running between two points — trunk/branch/root limbs. */
+  private addLimb(
+    a: THREE.Vector3,
+    b: THREE.Vector3,
+    r0: number,
+    r1: number,
+    mat: THREE.Material,
+    radialSegs = 6,
+  ) {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    if (len < 0.01) return
+    dir.normalize()
+    const geo = new THREE.CylinderGeometry(r1, r0, len, radialSegs)
+    geo.translate(0, len / 2, 0)
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+    geo.applyQuaternion(quat)
+    geo.translate(a.x, a.y, a.z)
+    this.addStatic(geo, mat)
+  }
+
+  /** A cluster of irregular dark blobs at a branch tip — real canopy mass, not a floating glow. */
+  private addFoliageClump(at: THREE.Vector3, mat: THREE.Material) {
+    const puffs = 2 + Math.floor(Math.random() * 2)
+    for (let i = 0; i < puffs; i++) {
+      const r = 0.32 + Math.random() * 0.26
+      const geo = new THREE.IcosahedronGeometry(r, 0)
+      geo.translate(
+        at.x + (Math.random() - 0.5) * 0.4,
+        at.y + (Math.random() - 0.5) * 0.3,
+        at.z + (Math.random() - 0.5) * 0.4,
+      )
+      this.addStatic(geo, mat)
+    }
+  }
+
   private buildLab() {
     const bioG = new THREE.MeshBasicMaterial({ color: 0x38ff78 })
     const cyanG = new THREE.MeshBasicMaterial({ color: 0x40e8ff })
@@ -623,38 +659,92 @@ export class Arena {
     }
 
     // ---- the black luminescent tree at the dome's heart ----
-    const trunk = new THREE.CylinderGeometry(0.35, 0.6, 3.8, 8)
-    trunk.translate(DOME_CX, 1.9, DOME_CZ)
-    this.addStatic(trunk, barkMat)
-    for (const [bx, by, bz, len, ang] of [
-      [0.4, 3.2, 0.2, 2.2, 0.9],
-      [-0.5, 3.0, -0.3, 2.0, -0.8],
-      [0.1, 3.6, -0.5, 1.8, 0.3],
-      [-0.2, 2.6, 0.5, 1.6, -1.2],
-    ] as const) {
-      const branch = new THREE.CylinderGeometry(0.08, 0.16, len, 6)
-      branch.rotateZ(ang)
-      branch.translate(DOME_CX + bx, by, DOME_CZ + bz)
-      this.addStatic(branch, barkMat)
+    // gnarled, gently-curving trunk built from oriented segments (not one straight
+    // pole), a real forked branch skeleton, and dark foliage clumps that the
+    // bioluminescent blooms glow from within — rather than floating light blobs.
+    const foliageMat = new THREE.MeshLambertMaterial({ color: 0x0a1410 })
+    const trunkBase = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
+
+    // root flare: short thick limbs splaying from the base out to the floor
+    const rootCount = 5
+    for (let i = 0; i < rootCount; i++) {
+      const a = (i / rootCount) * Math.PI * 2 + Math.random() * 0.4
+      const end = new THREE.Vector3(
+        DOME_CX + Math.cos(a) * (0.75 + Math.random() * 0.3),
+        0.02,
+        DOME_CZ + Math.sin(a) * (0.75 + Math.random() * 0.3),
+      )
+      this.addLimb(new THREE.Vector3(DOME_CX, 0.55, DOME_CZ), end, 0.24, 0.09, barkMat)
     }
-    // glowing veins climbing the trunk + a bloom canopy
+
+    // trunk: 4 stacked segments, each drifting slightly off-axis for a gnarled lean
+    const trunkH = 3.3
+    const trunkSegs = 4
+    const trunkPts: THREE.Vector3[] = [trunkBase.clone()]
+    let cx = DOME_CX
+    let cz = DOME_CZ
+    for (let i = 1; i <= trunkSegs; i++) {
+      cx += (Math.random() - 0.5) * 0.3
+      cz += (Math.random() - 0.5) * 0.3
+      trunkPts.push(new THREE.Vector3(cx, (i / trunkSegs) * trunkH, cz))
+    }
+    for (let i = 0; i < trunkSegs; i++) {
+      const t0 = i / trunkSegs
+      const t1 = (i + 1) / trunkSegs
+      const r0 = THREE.MathUtils.lerp(0.62, 0.16, t0)
+      const r1 = THREE.MathUtils.lerp(0.62, 0.16, t1)
+      this.addLimb(trunkPts[i], trunkPts[i + 1], r0, r1, barkMat)
+    }
+    const crown = trunkPts[trunkSegs] // top of the trunk — where branches fan out from
+
+    // branch skeleton: main limbs fanning from the crown, some forking into a
+    // secondary branch, each ending in a foliage clump (+ a glow bloom on half of them)
+    const branchCount = 8
+    for (let i = 0; i < branchCount; i++) {
+      const a = (i / branchCount) * Math.PI * 2 + Math.random() * 0.5
+      const reach = 1.5 + Math.random() * 1.1
+      const rise = 0.5 + Math.random() * 0.7
+      const start = crown.clone().add(new THREE.Vector3(0, -0.15 + Math.random() * 0.3, 0))
+      const tip = new THREE.Vector3(
+        crown.x + Math.cos(a) * reach,
+        Math.min(4.15, crown.y + rise),
+        crown.z + Math.sin(a) * reach,
+      )
+      this.addLimb(start, tip, 0.15, 0.05, barkMat)
+      this.addFoliageClump(tip, foliageMat)
+      if (i % 2 === 0) {
+        this.addBloom(tip.x, tip.y, tip.z, i % 4 ? GLOW_VIOLET : GLOW_CYAN, 1.1 + Math.random() * 0.5, 0.55)
+      }
+      // fork a thinner sub-branch off roughly the midpoint, for canopy fullness
+      if (i % 2 === 1) {
+        const mid = start.clone().lerp(tip, 0.55)
+        const forkA = a + (Math.random() - 0.5) * 1.4
+        const forkTip = new THREE.Vector3(
+          mid.x + Math.cos(forkA) * (0.8 + Math.random() * 0.6),
+          Math.min(4.2, mid.y + 0.4 + Math.random() * 0.5),
+          mid.z + Math.sin(forkA) * (0.8 + Math.random() * 0.6),
+        )
+        this.addLimb(mid, forkTip, 0.07, 0.03, barkMat)
+        this.addFoliageClump(forkTip, foliageMat)
+        if (i % 3 === 0) this.addBloom(forkTip.x, forkTip.y, forkTip.z, GLOW_CYAN, 0.9, 0.5)
+      }
+    }
+    // a little extra canopy mass around the crown itself so it doesn't read as bare
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = Math.random() * 0.6
+      this.addFoliageClump(
+        new THREE.Vector3(crown.x + Math.cos(a) * r, crown.y + 0.3 + Math.random() * 0.5, crown.z + Math.sin(a) * r),
+        foliageMat,
+      )
+    }
+
+    // glowing veins climbing the trunk's core
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2
-      const vein = new THREE.BoxGeometry(0.04, 3.4, 0.04)
-      vein.translate(DOME_CX + Math.cos(a) * 0.42, 1.9, DOME_CZ + Math.sin(a) * 0.42)
+      const vein = new THREE.BoxGeometry(0.04, trunkH * 0.9, 0.04)
+      vein.translate(DOME_CX + Math.cos(a) * 0.4, trunkH * 0.48, DOME_CZ + Math.sin(a) * 0.4)
       this.addStatic(vein, cyanG)
-    }
-    for (let i = 0; i < 14; i++) {
-      const a = Math.random() * Math.PI * 2
-      const r = 0.6 + Math.random() * 1.9
-      this.addBloom(
-        DOME_CX + Math.cos(a) * r,
-        3.4 + Math.random() * 1.0,
-        DOME_CZ + Math.sin(a) * r,
-        i % 2 ? GLOW_VIOLET : GLOW_CYAN,
-        1.3 + Math.random(),
-        0.5,
-      )
     }
 
     // ---- luminescent flora carpeting the dome floor ----

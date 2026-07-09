@@ -467,6 +467,43 @@ export class AudioEngine {
     this.noiseHit({ at: t, decay: 0.1, freq: 3000, filterType: 'highpass', gain: 0.25 })
   }
 
+  /** A Juggernaut winding up its charge — a long, deep, warning roar. */
+  juggernautYell() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    const dur = 0.9
+    const o = ctx.createOscillator()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(90, t)
+    o.frequency.linearRampToValueAtTime(150, t + dur * 0.4)
+    o.frequency.linearRampToValueAtTime(70, t + dur)
+    // vocal wobble for a guttural, roaring texture
+    const wob = ctx.createOscillator()
+    wob.frequency.value = 7
+    const wobGain = ctx.createGain()
+    wobGain.gain.value = 22
+    wob.connect(wobGain)
+    wobGain.connect(o.frequency)
+    const f = ctx.createBiquadFilter()
+    f.type = 'bandpass'
+    f.frequency.value = 380
+    f.Q.value = 1.2
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(0.85, t + dur * 0.25)
+    g.gain.setValueAtTime(0.85, t + dur * 0.7)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    o.connect(f)
+    f.connect(g)
+    this.route(g)
+    o.start(t)
+    o.stop(t + dur + 0.05)
+    wob.start(t)
+    wob.stop(t + dur + 0.05)
+    this.noiseHit({ at: t, decay: dur, freq: 350, gain: 0.4 })
+  }
+
   /** The startled moment a Midget Zombie lands and latches on. */
   midgetLatch() {
     const ctx = this.sfxReady()

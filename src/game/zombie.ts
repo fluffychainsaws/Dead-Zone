@@ -22,8 +22,24 @@ const MIDGET_LATCH_DAMAGE = 6
 const MIDGET_PRY_NEEDED = 2
 const MIDGET_PRY_KNOCKBACK_DAMAGE = 15
 
+// Juggernaut Zombie: a slow-moving brute — 5x wave HP, kills in two basic hits,
+// and periodically winds up (an audible yell) before charging in a dead-straight
+// line at high speed. Easy to outrun sideways, brutal if it catches you head-on.
+export const JUGGERNAUT_SCALE = 1.7
+const JUGGERNAUT_SPEED = 0.5 // ~1/4 of a normal zombie's average shamble speed
+const JUGGERNAUT_ATTACK_DAMAGE = 50 // two basic hits kill a full-health player
+const JUGGERNAUT_CHARGE_MIN_RANGE = 5
+const JUGGERNAUT_CHARGE_MAX_RANGE = 15
+const JUGGERNAUT_WINDUP_TIME = 1.1 // the "yell" telegraph — time to get clear
+const JUGGERNAUT_CHARGE_SPEED = 9.5
+const JUGGERNAUT_CHARGE_MAX_TIME = 2.2 // charge gives up if it hasn't hit anything by then
+const JUGGERNAUT_CHARGE_DAMAGE = 60
+const JUGGERNAUT_CHARGE_CONTACT_RADIUS = 1.1
+const JUGGERNAUT_CHARGE_COOLDOWN = 5.5
+
 export type ZombieState = 'chasing' | 'attacking' | 'dying'
 export type MidgetPhase = 'ground' | 'jumping' | 'latched'
+export type JuggernautPhase = 'ground' | 'winding' | 'charging'
 
 export interface TargetInfo {
   id: string
@@ -63,6 +79,7 @@ export class Zombie {
   speed: number
   runner: boolean
   isMidget: boolean
+  isJuggernaut: boolean
   luminescent: boolean
   state: ZombieState = 'chasing'
   dead = false // fully finished (despawn)
@@ -72,6 +89,11 @@ export class Zombie {
   latchedTargetId: string | null = null
   /** True for the one frame a jump launches — Game.ts checks this to trigger a sound. */
   justJumped = false
+
+  // juggernaut-only state
+  juggernautPhase: JuggernautPhase = 'ground'
+  /** True for the one frame a windup starts — Game.ts checks this to trigger the yell. */
+  justStartedCharge = false
 
   private parts: Parts
   private animT = Math.random() * 10
@@ -95,6 +117,14 @@ export class Zombie {
   private latchDamageT = 0
   private pryCount = 0
 
+  // juggernaut windup/charge internals
+  private chargeCooldown = 1.5 + Math.random() * 1.5
+  private windupT = 0
+  private chargeT = 0
+  private chargeDirX = 0
+  private chargeDirZ = 0
+  private chargeHitIds = new Set<string>() // don't double-hit the same target mid-charge
+
   constructor(
     scene: THREE.Scene,
     pos: THREE.Vector3,
@@ -103,14 +133,18 @@ export class Zombie {
     isMidget = false,
     wave = 1,
     luminescent = false,
+    isJuggernaut = false,
   ) {
     this.scene = scene
     this.hp = hp
     this.maxHp = hp
     this.runner = runner
     this.isMidget = isMidget
+    this.isJuggernaut = isJuggernaut
     this.luminescent = luminescent
-    if (isMidget) {
+    if (isJuggernaut) {
+      this.speed = JUGGERNAUT_SPEED
+    } else if (isMidget) {
       this.speed = 2.4 + Math.random() * 0.5 // ground-scuttle speed between jumps
     } else if (runner) {
       // ramps in slowly after wave 5, hard-capped — never an unbeatable sprint
@@ -118,10 +152,11 @@ export class Zombie {
     } else {
       this.speed = 1.5 + Math.random() * 0.7
     }
-    const { group, parts } = buildZombieMesh(runner, luminescent)
+    const { group, parts } = buildZombieMesh(runner, luminescent, isJuggernaut)
     this.group = group
     this.parts = parts
     if (isMidget) group.scale.setScalar(MIDGET_SCALE)
+    if (isJuggernaut) group.scale.setScalar(JUGGERNAUT_SCALE)
     group.position.copy(pos)
     group.userData.zombie = this
     scene.add(group)
@@ -192,6 +227,7 @@ export class Zombie {
     others: Zombie[],
   ): AttackResult | null {
     this.justJumped = false
+    this.justStartedCharge = false
     if (this.state === 'dying') {
       this.deathT += dt
       // fall over, then sink
@@ -222,6 +258,10 @@ export class Zombie {
       if (this.midgetPhase === 'latched') return this.updateLatched(dt, targets)
       if (this.midgetPhase === 'jumping') return this.updateJumping(dt, targets)
     }
+    if (this.isJuggernaut) {
+      if (this.juggernautPhase === 'winding') return this.updateWinding(dt, target)
+      if (this.juggernautPhase === 'charging') return this.updateCharging(dt, targets, nav)
+    }
 
     if (!target) return null
     const dx = target.pos.x - pos.x
@@ -239,12 +279,30 @@ export class Zombie {
     }
     if (this.isMidget) this.jumpCooldown = Math.max(0, this.jumpCooldown - dt)
 
+    if (
+      this.isJuggernaut &&
+      this.chargeCooldown <= 0 &&
+      dist >= JUGGERNAUT_CHARGE_MIN_RANGE &&
+      dist <= JUGGERNAUT_CHARGE_MAX_RANGE
+    ) {
+      this.justStartedCharge = true
+      this.juggernautPhase = 'winding'
+      this.windupT = 0
+      // direction locks in now — the charge itself never tracks the target
+      const dlen = Math.hypot(dx, dz) || 1
+      this.chargeDirX = dx / dlen
+      this.chargeDirZ = dz / dlen
+      this.state = 'attacking' // borrow this state so Horde/host treat it as "engaged"
+      return null
+    }
+    if (this.isJuggernaut) this.chargeCooldown = Math.max(0, this.chargeCooldown - dt)
+
     let dealt = 0
     if (dist < ATTACK_RANGE || this.state === 'attacking') {
       this.state = 'attacking'
       this.attackT += dt
       if (this.attackT >= ATTACK_WINDUP && this.attackT - dt < ATTACK_WINDUP) {
-        if (dist < ATTACK_RANGE + 0.4) dealt = ATTACK_DAMAGE
+        if (dist < ATTACK_RANGE + 0.4) dealt = this.isJuggernaut ? JUGGERNAUT_ATTACK_DAMAGE : ATTACK_DAMAGE
       }
       if (this.attackT >= ATTACK_COOLDOWN) {
         this.attackT = 0
@@ -409,6 +467,60 @@ export class Zombie {
     return this.latchedTargetId ? { targetId: this.latchedTargetId, damage: MIDGET_LATCH_DAMAGE } : null
   }
 
+  /** Braced, roaring wind-up — telegraphs the charge direction long enough to dodge. */
+  private updateWinding(dt: number, target: TargetInfo | null): AttackResult | null {
+    if (target) {
+      const dx = target.pos.x - this.group.position.x
+      const dz = target.pos.z - this.group.position.z
+      if (Math.hypot(dx, dz) > 0.01) this.group.rotation.y = Math.atan2(dx, dz)
+    }
+    this.windupT += dt
+    // shaking, bracing-to-charge animation
+    const shake = Math.sin(this.windupT * 26) * 0.06
+    this.parts.armL.rotation.x = -Math.PI / 2 - 0.3 + shake
+    this.parts.armR.rotation.x = -Math.PI / 2 - 0.3 - shake
+    if (this.windupT < JUGGERNAUT_WINDUP_TIME) return null
+    this.juggernautPhase = 'charging'
+    this.chargeT = 0
+    this.chargeHitIds.clear()
+    return null
+  }
+
+  /** Barrels forward in a dead-straight line until it hits someone, a wall, or times out. */
+  private updateCharging(dt: number, targets: TargetInfo[], nav: ZombieNav): AttackResult | null {
+    this.chargeT += dt
+    const pos = this.group.position
+    pos.x += this.chargeDirX * JUGGERNAUT_CHARGE_SPEED * dt
+    pos.z += this.chargeDirZ * JUGGERNAUT_CHARGE_SPEED * dt
+    // any collider nudge ends the charge right there — a straight-line charge that got
+    // deflected sideways by wall-sliding would drift off course and could miss a target
+    // standing dead ahead of it
+    const preX = pos.x
+    const preZ = pos.z
+    this.resolve(nav.colliders, 'x')
+    this.resolve(nav.colliders, 'z')
+    const hitWall = pos.x !== preX || pos.z !== preZ
+    this.group.rotation.z = Math.sin(this.chargeT * 30) * 0.05 // juddering charge shake
+
+    let result: AttackResult | null = null
+    for (const t of targets) {
+      if (this.chargeHitIds.has(t.id)) continue
+      const d = Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z)
+      if (d <= JUGGERNAUT_CHARGE_CONTACT_RADIUS) {
+        this.chargeHitIds.add(t.id)
+        if (!result) result = { targetId: t.id, damage: JUGGERNAUT_CHARGE_DAMAGE }
+      }
+    }
+
+    if (hitWall || this.chargeT >= JUGGERNAUT_CHARGE_MAX_TIME) {
+      this.group.rotation.z = 0
+      this.juggernautPhase = 'ground'
+      this.chargeCooldown = JUGGERNAUT_CHARGE_COOLDOWN
+      this.state = 'chasing'
+    }
+    return result
+  }
+
   isHeadPart(obj: THREE.Object3D): boolean {
     return obj === this.parts.head || obj.parent === this.parts.head
   }
@@ -455,23 +567,34 @@ export class Zombie {
 export function buildZombieMeshExternal(
   runner: boolean,
   luminescent = false,
+  juggernaut = false,
 ): { group: THREE.Group; parts: Parts } {
-  return buildZombieMesh(runner, luminescent)
+  return buildZombieMesh(runner, luminescent, juggernaut)
 }
 
 function buildZombieMesh(
   runner: boolean,
   luminescent = false,
+  juggernaut = false,
 ): { group: THREE.Group; parts: Parts } {
   const group = new THREE.Group()
-  // rotting skin: sickly green-grey, runners redder; lab specimens glow in the dark
-  const hue = luminescent ? 0.42 : runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1
-  const skin = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(hue, 0.35, 0.22 + Math.random() * 0.1),
-  })
-  const cloth = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(luminescent ? 0.5 : Math.random(), 0.2, 0.12 + Math.random() * 0.08),
-  })
+  // rotting skin: sickly green-grey, runners redder, juggernauts ash-grey; lab specimens glow in the dark
+  const skin = new THREE.MeshLambertMaterial(
+    juggernaut
+      ? { color: 0x353030 }
+      : {
+          color: new THREE.Color().setHSL(
+            luminescent ? 0.42 : runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1,
+            0.35,
+            0.22 + Math.random() * 0.1,
+          ),
+        },
+  )
+  const cloth = new THREE.MeshLambertMaterial(
+    juggernaut
+      ? { color: 0x2c0a0a }
+      : { color: new THREE.Color().setHSL(luminescent ? 0.5 : Math.random(), 0.2, 0.12 + Math.random() * 0.08) },
+  )
   if (luminescent) {
     // emissive makes them self-lit — the only zombies you can see in the pitch-black Lab
     skin.emissive = new THREE.Color(0x1cff9a)
@@ -480,40 +603,44 @@ function buildZombieMesh(
     cloth.emissiveIntensity = 0.7
   }
 
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.58, 0.16), cloth)
-  legL.position.set(-0.12, 0.29, 0)
-  legL.geometry.translate(0, -0.29, 0)
-  legL.position.y = 0.58
-  const legR = legL.clone()
-  legR.position.x = 0.12
+  // bulk multiplier fattens every limb for the juggernaut's hulking silhouette —
+  // the overall height comes from the caller's uniform group scale on top of this
+  const b = juggernaut ? 1.55 : 1
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.26), cloth)
+  const legGeo = new THREE.BoxGeometry(0.16 * b, 0.58, 0.16 * b)
+  legGeo.translate(0, -0.29, 0)
+  const legL = new THREE.Mesh(legGeo, cloth)
+  legL.position.set(-0.12 * b, 0.58, 0)
+  const legR = new THREE.Mesh(legGeo.clone(), cloth)
+  legR.position.set(0.12 * b, 0.58, 0)
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5 * b, 0.6, 0.26 * b), cloth)
   torso.position.y = 0.88
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 0.26), skin)
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26 * b, 0.28 * b, 0.26 * b), skin)
   head.position.y = 1.34
   head.name = 'head'
-  // glowing eyes + slack mouth on the front face (+z = facing direction)
-  const eyeMat = new THREE.MeshBasicMaterial({ color: runner ? 0xff2a1a : 0xc8e04a })
-  const eyeGeo = new THREE.BoxGeometry(0.055, 0.045, 0.02)
+  // glowing eyes + slack mouth on the front face (+z = facing direction) — juggernauts always burn red
+  const eyeMat = new THREE.MeshBasicMaterial({ color: runner || juggernaut ? 0xff2a1a : 0xc8e04a })
+  const eyeGeo = new THREE.BoxGeometry(0.055 * b, 0.045 * b, 0.02)
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
-  eyeL.position.set(-0.062, 0.045, 0.132)
+  eyeL.position.set(-0.062 * b, 0.045 * b, 0.132 * b)
   const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
-  eyeR.position.set(0.062, 0.045, 0.132)
+  eyeR.position.set(0.062 * b, 0.045 * b, 0.132 * b)
   const mouth = new THREE.Mesh(
-    new THREE.BoxGeometry(0.13, runner ? 0.07 : 0.045, 0.02),
+    new THREE.BoxGeometry(0.13 * b, (runner || juggernaut ? 0.07 : 0.045) * b, 0.02),
     new THREE.MeshBasicMaterial({ color: 0x140404 }),
   )
-  mouth.position.set(0, -0.075, 0.132)
+  mouth.position.set(0, -0.075 * b, 0.132 * b)
   head.add(eyeL, eyeR, mouth)
 
-  const armGeo = new THREE.BoxGeometry(0.12, 0.52, 0.12)
+  const armGeo = new THREE.BoxGeometry(0.12 * b, 0.52, 0.12 * b)
   armGeo.translate(0, -0.26, 0) // pivot at shoulder
   const armL = new THREE.Mesh(armGeo, skin)
-  armL.position.set(-0.32, 1.12, 0)
+  armL.position.set(-0.32 * b, 1.12, 0)
   armL.rotation.x = -Math.PI / 2
   const armR = new THREE.Mesh(armGeo.clone(), skin)
-  armR.position.set(0.32, 1.12, 0)
+  armR.position.set(0.32 * b, 1.12, 0)
   armR.rotation.x = -Math.PI / 2
 
   group.add(legL, legR, torso, head, armL, armR)

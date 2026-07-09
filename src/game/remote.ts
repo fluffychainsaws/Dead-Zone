@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { PlayerState, ZombieState } from '../net/room'
-import { buildZombieMeshExternal, MIDGET_SCALE } from './zombie'
+import { buildZombieMeshExternal, MIDGET_SCALE, JUGGERNAUT_SCALE } from './zombie'
 
 function makeNameTag(name: string): THREE.Sprite {
   const c = document.createElement('canvas')
@@ -87,6 +87,7 @@ interface RemoteZombie {
   runner: boolean
   midget: boolean
   luminescent: boolean
+  juggernaut: boolean
   animT: number
   deathT: number
   parts: ReturnType<typeof buildZombieMeshExternal>['parts']
@@ -104,12 +105,13 @@ export class RemoteZombieField {
   /** Reconcile against the authoritative list from the host. */
   applyState(list: ZombieState[]) {
     const seen = new Set<number>()
-    for (const [id, x, z, ry, state, runner, midget, lum] of list) {
+    for (const [id, x, z, ry, state, runner, midget, lum, jug] of list) {
       seen.add(id)
       let rz = this.zombies.get(id)
       if (!rz) {
-        const built = buildZombieMeshExternal(runner === 1, lum === 1)
+        const built = buildZombieMeshExternal(runner === 1, lum === 1, jug === 1)
         if (midget === 1) built.group.scale.setScalar(MIDGET_SCALE)
+        if (jug === 1) built.group.scale.setScalar(JUGGERNAUT_SCALE)
         built.group.position.set(x, 0, z)
         built.group.userData.zombieId = id
         this.scene.add(built.group)
@@ -122,6 +124,7 @@ export class RemoteZombieField {
           runner: runner === 1,
           midget: midget === 1,
           luminescent: lum === 1,
+          juggernaut: jug === 1,
           animT: Math.random() * 10,
           deathT: 0,
           parts: built.parts,
@@ -180,6 +183,7 @@ export class RemoteZombieField {
     runner: boolean
     midget: boolean
     luminescent: boolean
+    juggernaut: boolean
     dying: boolean
   }> {
     return [...this.zombies.values()].map((rz) => ({
@@ -188,6 +192,7 @@ export class RemoteZombieField {
       runner: rz.runner,
       midget: rz.midget,
       luminescent: rz.luminescent,
+      juggernaut: rz.juggernaut,
       dying: rz.state === 2,
     }))
   }

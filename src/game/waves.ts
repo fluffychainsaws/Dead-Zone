@@ -9,6 +9,7 @@ const SPAWN_INTERVAL = 1.1
 const BASE_MAX_ALIVE = 22
 const RUNNER_START_WAVE = 6 // no runners at all before this
 const MIDGET_START_WAVE = 4
+const JUGGERNAUT_START_WAVE = 6
 
 export interface WaveEvents {
   onWaveStart?: (wave: number) => void
@@ -40,8 +41,9 @@ export class Horde {
     isMidget = false,
     wave = 1,
     luminescent = false,
+    isJuggernaut = false,
   ): Zombie {
-    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave, luminescent)
+    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave, luminescent, isJuggernaut)
     this.zombies.push(z)
     return z
   }
@@ -173,6 +175,12 @@ export class WaveSystem {
     return Math.min(0.08 + (wave - MIDGET_START_WAVE) * 0.02, 0.22)
   }
 
+  /** Rare, low-cap — a 5x-HP brute is a big spike in threat, so it stays scarce. */
+  juggernautChance(wave: number): number {
+    if (wave < JUGGERNAUT_START_WAVE) return 0
+    return Math.min(0.02 + (wave - JUGGERNAUT_START_WAVE) * 0.008, 0.08)
+  }
+
   update(dt: number) {
     if (this.phase === 'idle') return
 
@@ -202,15 +210,22 @@ export class WaveSystem {
           0,
           (Math.random() - 0.5) * 1.4,
         )
-        const isMidget = Math.random() < this.midgetChance(this.wave)
-        const runner = !isMidget && Math.random() < this.runnerChance(this.wave)
+        const isJuggernaut = Math.random() < this.juggernautChance(this.wave)
+        const isMidget = !isJuggernaut && Math.random() < this.midgetChance(this.wave)
+        const runner = !isJuggernaut && !isMidget && Math.random() < this.runnerChance(this.wave)
+        const hp = isJuggernaut
+          ? this.zombieHp(this.wave) * 5
+          : isMidget
+            ? Math.round(this.zombieHp(this.wave) / 2)
+            : this.zombieHp(this.wave)
         this.horde.spawn(
           spot.pos.clone().add(jitter),
-          isMidget ? Math.round(this.zombieHp(this.wave) / 2) : this.zombieHp(this.wave),
+          hp,
           runner,
           isMidget,
           this.wave,
           spot.lab, // lab spawns glow in the dark
+          isJuggernaut,
         )
       }
     } else if (this.horde.aliveCount === 0) {
