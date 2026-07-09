@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildArena, type Arena, FLASHLIGHT_POS, NVG_POS } from './arena'
+import { buildArena, type Arena, type Collider, FLASHLIGHT_POS, NVG_POS } from './arena'
 import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem, weaponKind } from './weapons'
@@ -68,6 +68,7 @@ export class Game {
   private wasDowned = false
   private downNotified = new Set<string>()
   private mysteryBox!: MysteryBox
+  private clawCollider: Collider = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, height: 2.4 }
   private meleeCooldown = 0
 
   // --- The Lab: light sources & darkness ---
@@ -124,6 +125,11 @@ export class Game {
       tick: () => audio.boxTick(),
       reveal: () => audio.boxReveal(),
     })
+    // the cabinet is solid — no walking through it — and the collider tags
+    // along wherever the box relocates to
+    this.updateClawCollider(this.mysteryBox.pos.x, this.mysteryBox.pos.z)
+    this.arena.playerColliders.push(this.clawCollider)
+    this.arena.zombieColliders.push(this.clawCollider)
     this.hud = new Hud(this.input.isTouch)
     this.horde = new Horde(this.scene)
     this.remoteZombies = new RemoteZombieField(this.scene)
@@ -133,6 +139,7 @@ export class Game {
         this.hud.banner(`WAVE ${w}`)
         audio.waveStinger()
         audio.setIntensity(Math.min(0.15 + w * 0.08, 1))
+        this.maybeRelocateMysteryBox()
       },
       onIntermission: (next) => {
         this.hud.banner(`WAVE ${next} INCOMING…`, 3200)
@@ -413,6 +420,7 @@ export class Game {
     this.input.requestLock()
     audio.unlock()
     audio.startMusic()
+    audio.startClawTune()
     audio.setIntensity(0.1)
   }
 
@@ -537,6 +545,7 @@ export class Game {
         this.hud.banner(`WAVE ${s.w}`)
         audio.waveStinger()
         audio.setIntensity(Math.min(0.15 + s.w * 0.08, 1))
+        this.maybeRelocateMysteryBox()
       }
     }
     this.clientPhase = s.ph === 'intermission' ? 'intermission' : 'active'
@@ -765,6 +774,59 @@ export class Game {
       }
     }
     return true
+  }
+
+  private updateClawCollider(x: number, z: number) {
+    const HALF_X = 1.0
+    const HALF_Z = 0.85
+    this.clawCollider.minX = x - HALF_X
+    this.clawCollider.maxX = x + HALF_X
+    this.clawCollider.minZ = z - HALF_Z
+    this.clawCollider.maxZ = z + HALF_Z
+  }
+
+  /** 5–10% chance per wave the claw machine teleports to a random spot anywhere
+   *  on the map — including rooms whose doors are still locked — so its locator
+   *  jingle (see updateClawTune) is the only way to track it down between rounds. */
+  private maybeRelocateMysteryBox() {
+    if (this.mysteryBox.state !== 'idle') return
+    if (Math.random() >= 0.05 + Math.random() * 0.05) return
+    const HALF_X = 1.0
+    const HALF_Z = 0.85
+    const MARGIN = 3
+    for (let i = 0; i < 40; i++) {
+      const room = this.arena.rooms[Math.floor(Math.random() * this.arena.rooms.length)]
+      const w = room.maxX - room.minX
+      const d = room.maxZ - room.minZ
+      if (w < MARGIN * 2 + HALF_X * 2 || d < MARGIN * 2 + HALF_Z * 2) continue
+      const x = room.minX + MARGIN + Math.random() * (w - MARGIN * 2)
+      const z = room.minZ + MARGIN + Math.random() * (d - MARGIN * 2)
+      const blocked = this.arena.playerColliders.some(
+        (c) =>
+          c !== this.clawCollider &&
+          x + HALF_X > c.minX &&
+          x - HALF_X < c.maxX &&
+          z + HALF_Z > c.minZ &&
+          z - HALF_Z < c.maxZ,
+      )
+      if (blocked) continue
+      this.mysteryBox.moveTo(x, z)
+      this.updateClawCollider(x, z)
+      this.hud.banner('THE CLAW MACHINE HAS MOVED…', 2600)
+      return
+    }
+  }
+
+  /** Fades the claw machine's locator jingle in as the player closes in on it. */
+  private updateClawTune() {
+    const dist = Math.hypot(
+      this.player.pos.x - this.mysteryBox.pos.x,
+      this.player.pos.z - this.mysteryBox.pos.z,
+    )
+    const NEAR = 4
+    const FAR = 32
+    const proximity = 1 - THREE.MathUtils.clamp((dist - NEAR) / (FAR - NEAR), 0, 1)
+    audio.setClawTuneVolume(proximity * proximity) // ease-in — stays faint until fairly close
   }
 
   private handleShopping() {
@@ -1034,6 +1096,7 @@ export class Game {
       }
       this.economy.update(dt)
       this.mysteryBox.update(dt)
+      this.updateClawTune()
       this.watchTeammates()
 
       // simulation: host & solo run the horde; clients interpolate

@@ -150,20 +150,31 @@ export class MysteryBox {
     rail.position.set(0, RAIL_Y + 0.12, 0)
     this.group.add(rail)
 
-    // the pile of prize boxes, sitting on the cabinet floor
-    const colors = [0x4a3a22, 0x2e4a22, 0x3a2244, 0x224a44]
+    // the pile of prize boxes, sitting on the cabinet floor — a full, heaped pile
+    const colors = [0x4a3a22, 0x2e4a22, 0x3a2244, 0x224a44, 0x4a2222, 0x22394a]
     let ci = 0
-    for (const [x, z] of [
+    for (const [x, z, y] of [
       [-0.55, -0.3],
       [-0.3, 0.1],
       [-0.55, 0.35],
       [-0.15, -0.35],
       [-0.65, 0.05],
       [-0.25, 0.4],
+      [-0.7, -0.15],
+      [-0.4, -0.15],
+      [-0.7, 0.3],
+      [-0.35, -0.42],
+      [-0.15, 0.15],
+      [-0.6, -0.45],
+      [0.0, -0.1],
+      [0.02, 0.25],
+      [-0.5, 0.15, 0.78], // stacked on top for a heaped look
+      [-0.28, -0.1, 0.78],
+      [-0.6, 0.15, 0.78],
     ]) {
       const color = colors[ci++ % colors.length]
       const prize = buildPrizeBox(color)
-      prize.position.set(x, 0.58, z)
+      prize.position.set(x, y ?? PILE_Y, z)
       prize.rotation.y = Math.random() * Math.PI
       this.group.add(prize)
       this.pile.push({ group: prize, homeX: x, homeZ: z, color })
@@ -239,6 +250,12 @@ export class MysteryBox {
 
   near(p: THREE.Vector3, maxDist = 3.2): boolean {
     return Math.hypot(p.x - this.pos.x, p.z - this.pos.z) < maxDist
+  }
+
+  /** Teleport the whole cabinet — only call while idle, between rounds. */
+  moveTo(x: number, z: number) {
+    this.pos.set(x, 0, z)
+    this.group.position.set(x, 0, z)
   }
 
   prompt(interactKey: string): string | null {

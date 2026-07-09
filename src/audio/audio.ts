@@ -28,6 +28,8 @@ export class AudioEngine {
   private musicStarted = false
   private intensity = 0
   private musicNodes: { cutoff?: BiquadFilterNode; pulseGain?: GainNode } = {}
+  private clawGain: GainNode | null = null
+  private clawVolume = 0
 
   /** Must be called from a user gesture (click/tap). Safe to call repeatedly. */
   unlock() {
@@ -146,6 +148,48 @@ export class AudioEngine {
     const t = this.ctx.currentTime
     this.musicNodes.cutoff?.frequency.linearRampToValueAtTime(180 + this.intensity * 640, t + 2)
     this.musicNodes.pulseGain?.gain.linearRampToValueAtTime(this.intensity * 0.05, t + 2)
+  }
+
+  /** A looping circus-y jingle that marks the claw machine's location — call
+   *  setClawTuneVolume() every frame with a 0..1 proximity factor so players
+   *  can home in on it after it relocates. Started once and left running;
+   *  silent (gain 0) until a caller raises the volume. */
+  startClawTune() {
+    if (!this.ctx || this.clawGain) return
+    const ctx = this.ctx
+    this.clawGain = ctx.createGain()
+    this.clawGain.gain.value = 0
+    this.clawGain.connect(this.musicBus)
+    const notes = [523.25, 659.25, 783.99, 659.25, 987.77, 783.99] // a tinkling little arpeggio
+    const playLoop = () => {
+      if (!this.ctx || !this.clawGain) return
+      const t = this.ctx.currentTime
+      if (this.clawVolume > 0.005) {
+        notes.forEach((f, i) => {
+          const nt = t + i * 0.2
+          const o = ctx.createOscillator()
+          o.type = 'triangle'
+          o.frequency.value = f
+          const g = ctx.createGain()
+          g.gain.setValueAtTime(0, nt)
+          g.gain.linearRampToValueAtTime(0.4, nt + 0.02)
+          g.gain.exponentialRampToValueAtTime(0.0001, nt + 0.55)
+          o.connect(g)
+          g.connect(this.clawGain!)
+          o.start(nt)
+          o.stop(nt + 0.6)
+        })
+      }
+      setTimeout(playLoop, 2400)
+    }
+    playLoop()
+  }
+
+  /** 0 = silent, 1 = right on top of it. */
+  setClawTuneVolume(proximity: number) {
+    this.clawVolume = Math.max(0, Math.min(1, proximity))
+    if (!this.ctx || !this.clawGain) return
+    this.clawGain.gain.linearRampToValueAtTime(this.clawVolume * 0.55, this.ctx.currentTime + 0.2)
   }
 
   private scheduleMotif() {
