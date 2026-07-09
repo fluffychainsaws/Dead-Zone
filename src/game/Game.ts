@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildArena, type Arena } from './arena'
+import { buildArena, type Arena, FLASHLIGHT_POS, NVG_POS } from './arena'
 import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem, weaponKind } from './weapons'
@@ -70,6 +70,19 @@ export class Game {
   private mysteryBox!: MysteryBox
   private meleeCooldown = 0
 
+  // --- The Lab: light sources & darkness ---
+  private ownsFlashlight = false
+  private ownsNVG = false
+  private lightMode: 'off' | 'flashlight' | 'nvg' = 'off'
+  private flashlight!: THREE.SpotLight
+  private nvgLight!: THREE.AmbientLight
+  private baseAmbient = 0
+  private baseHemi = 0
+  private baseMoon = 0
+  private jailFog!: THREE.FogExp2
+  private labFog = new THREE.FogExp2(0x01040a, 0.045)
+  private inLab = false
+
   // --- midget zombie latch state ---
   private lastPlayerPos = new THREE.Vector3()
   private lastAvatarPos = new Map<string, THREE.Vector3>()
@@ -86,6 +99,23 @@ export class Game {
     const carryLight = new THREE.PointLight(0x99aa88, 3.5, 7, 1.5)
     carryLight.position.set(0, 0.2, -0.3)
     this.camera.add(carryLight)
+
+    // remember normal-light levels so we can plunge The Lab into darkness and restore
+    this.baseAmbient = this.arena.ambient.intensity
+    this.baseHemi = this.arena.hemi.intensity
+    this.baseMoon = this.arena.moon.intensity
+    this.jailFog = this.scene.fog as THREE.FogExp2
+
+    // flashlight: a tight cone bolted to the camera, off until you buy + toggle it
+    this.flashlight = new THREE.SpotLight(0xfff2d0, 0, 26, 0.62, 0.45, 1.2)
+    this.flashlight.position.set(0, 0, 0.2)
+    this.flashlight.target.position.set(0, 0, -1)
+    this.camera.add(this.flashlight)
+    this.camera.add(this.flashlight.target)
+
+    // night vision: a flat green wash over everything, off until bought + toggled
+    this.nvgLight = new THREE.AmbientLight(0x1cff5a, 0)
+    this.scene.add(this.nvgLight)
     this.input = new Input(canvas)
     this.effects = new Effects(this.scene)
     this.weapon = new WeaponSystem(this.camera)
@@ -347,7 +377,7 @@ export class Game {
     for (const z of this.remoteZombies.snapshot()) {
       if (z.dying) continue // don't resurrect a zombie mid-death animation
       const hp = z.midget ? Math.round(this.waves.zombieHp(wave) / 2) : this.waves.zombieHp(wave)
-      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), hp, z.runner, z.midget, wave)
+      this.horde.spawn(new THREE.Vector3(z.x, 0, z.z), hp, z.runner, z.midget, wave, z.luminescent)
     }
     this.remoteZombies.clear()
     this.waves.resumeAt(this.clientWave, this.clientPhase)
@@ -398,6 +428,86 @@ export class Game {
       nextWaypoint: (p: THREE.Vector3, t: THREE.Vector3) => this.arena.nextWaypoint(p, t),
       inOpeningZone: (p: THREE.Vector3) => this.arena.inOpeningZone(p),
     }
+  }
+
+  /** Darkness/vision for the local player only — swaps to pitch black inside The Lab. */
+  private updateVision() {
+    const nowInLab = this.arena.isLab(this.player.pos.x, this.player.pos.z)
+    if (nowInLab !== this.inLab) {
+      this.inLab = nowInLab
+      this.scene.fog = nowInLab ? this.labFog : this.jailFog
+      if (nowInLab) {
+        // pitch black — only bioluminescence + your own light source show anything
+        this.arena.ambient.intensity = 0.015
+        this.arena.hemi.intensity = 0.0
+        this.arena.moon.intensity = 0.0
+      } else {
+        this.arena.ambient.intensity = this.baseAmbient
+        this.arena.hemi.intensity = this.baseHemi
+        this.arena.moon.intensity = this.baseMoon
+      }
+    }
+    // light sources only do anything in the dark
+    const flashOn = nowInLab && this.lightMode === 'flashlight'
+    const nvgOn = nowInLab && this.lightMode === 'nvg'
+    this.flashlight.intensity = flashOn ? 6 : 0
+    this.nvgLight.intensity = nvgOn ? 2.2 : 0
+    this.hud.setLightStatus(nowInLab, this.lightMode, this.ownsFlashlight, this.ownsNVG)
+  }
+
+  /** T cycles: off → owned flashlight → owned NVG → off. */
+  private cycleLight() {
+    const modes: Array<'off' | 'flashlight' | 'nvg'> = ['off']
+    if (this.ownsFlashlight) modes.push('flashlight')
+    if (this.ownsNVG) modes.push('nvg')
+    if (modes.length === 1) {
+      this.hud.banner('NO LIGHT SOURCE — BUY ONE IN THE LAB', 2000)
+      return
+    }
+    const idx = modes.indexOf(this.lightMode)
+    this.lightMode = modes[(idx + 1) % modes.length]
+    audio.purchase()
+  }
+
+  /** Flashlight (20k) & Night-Vision Goggles (40k) at the bottom of the lab stairs. Returns true if it owned the prompt. */
+  private handleLightBuys(): boolean {
+    const near = (p: THREE.Vector3) => Math.hypot(this.player.pos.x - p.x, this.player.pos.z - p.z) < 2.8
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    if (near(FLASHLIGHT_POS)) {
+      this.hud.setPrompt(this.ownsFlashlight ? 'FLASHLIGHT — OWNED (T to toggle)' : `${key} FLASHLIGHT — 20000`)
+      if (this.input.consumeInteract() && !this.ownsFlashlight) {
+        if (this.economy.spend(20000)) {
+          this.ownsFlashlight = true
+          this.lightMode = 'flashlight'
+          this.hud.setPoints(this.economy.points)
+          this.hud.pointsDelta(-20000)
+          this.hud.banner('FLASHLIGHT ACQUIRED — T TO TOGGLE', 2600)
+          audio.purchase()
+        } else {
+          this.hud.banner('NOT ENOUGH POINTS', 1200)
+          audio.deny()
+        }
+      }
+      return true
+    }
+    if (near(NVG_POS)) {
+      this.hud.setPrompt(this.ownsNVG ? 'NIGHT VISION — OWNED (T to toggle)' : `${key} NIGHT VISION GOGGLES — 40000`)
+      if (this.input.consumeInteract() && !this.ownsNVG) {
+        if (this.economy.spend(40000)) {
+          this.ownsNVG = true
+          this.lightMode = 'nvg'
+          this.hud.setPoints(this.economy.points)
+          this.hud.pointsDelta(-40000)
+          this.hud.banner('NIGHT VISION ACQUIRED — T TO TOGGLE', 2600)
+          audio.purchase()
+        } else {
+          this.hud.banner('NOT ENOUGH POINTS', 1200)
+          audio.deny()
+        }
+      }
+      return true
+    }
+    return false
   }
 
   private ensureAvatar(id: string): RemotePlayer {
@@ -651,6 +761,7 @@ export class Game {
 
   private handleShopping() {
     if (this.handleRevive()) return
+    if (this.handleLightBuys()) return
     if (this.handleDoors()) return
     if (this.handleMysteryBox()) return
     const station = this.economy.nearestStation(this.player.pos)
@@ -759,6 +870,7 @@ export class Game {
           z.state === 'dying' ? 2 : z.state === 'attacking' ? 1 : 0,
           z.runner ? 1 : 0,
           z.isMidget ? 1 : 0,
+          z.luminescent ? 1 : 0,
         ]),
       p: { ...Object.fromEntries(this.peerStates), host: self },
       d: this.arena.openDoorIds(),
@@ -799,13 +911,16 @@ export class Game {
         this.input.consumeJump()
         this.input.consumeCrouch()
         this.input.consumeMelee()
+        this.input.consumeLightToggle()
         if (this.netMode === 'solo') {
           // solo pause freezes the whole world
+          this.arena.updateFlora(this.clock.getElapsedTime())
           this.renderer.render(this.scene, this.camera)
           return
         }
       } else {
         this.player.update(dt, this.input, this.arena.playerColliders)
+        if (this.input.consumeLightToggle()) this.cycleLight()
       }
       // the horde has mass — you can't wade through it
       const bodies =
@@ -814,6 +929,8 @@ export class Game {
           : this.horde.zombies.filter((z) => z.alive).map((z) => z.group.position)
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
+      this.updateVision()
+      this.arena.updateFlora(this.clock.getElapsedTime())
 
       // downed players drop to their sidearm but keep fighting
       if (this.player.downed !== this.wasDowned) {

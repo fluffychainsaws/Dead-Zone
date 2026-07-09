@@ -1,7 +1,14 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { makeLabelSprite } from './economy'
-import { glowSprite, GLOW_RED } from './effects'
+import {
+  glowSprite,
+  GLOW_RED,
+  GLOW_GOLD,
+  GLOW_CYAN,
+  GLOW_BIO,
+  GLOW_VIOLET,
+} from './effects'
 
 // Blackmarsh Penitentiary — a broken-down jail. Zombies crawl in through
 // breached cell walls and boarded windows (player-blocking, zombie-passable);
@@ -56,6 +63,18 @@ const T = 1 // wall thickness
 const GATE_W = 3
 const WIN_W = 2.6
 
+// The Lab — a bioluminescent basement north of the Showers, reached down a stairwell.
+const LAB_X0 = -40
+const LAB_X1 = 34
+const LAB_Z0 = -70 // far (north) wall
+const LAB_CEIL = 4.6 // 15 ft ceilings
+const DOME_CX = -3
+const DOME_CZ = -50
+const DOME_R = 11
+const STAIR_X = -26 // stairwell gate + corridor centre
+export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
+export const NVG_POS = new THREE.Vector3(-19, 0, -30)
+
 export class Arena {
   playerColliders: Collider[] = []
   zombieColliders: Collider[] = []
@@ -65,9 +84,17 @@ export class Arena {
     { id: 1, name: 'SHOWERS', minX: X0, maxX: -10, minZ: Z0, maxZ: 0, open: false },
     { id: 2, name: 'WARDEN’S WING', minX: 10, maxX: X1, minZ: Z0, maxZ: 0, open: false },
     { id: 3, name: 'ARMORY', minX: -10, maxX: 10, minZ: Z0, maxZ: 0, open: false },
+    { id: 4, name: 'THE LAB', minX: LAB_X0, maxX: LAB_X1, minZ: LAB_Z0, maxZ: -22, open: false },
   ]
   doors: Door[] = []
   openings: Opening[] = []
+
+  // exposed so the Game can plunge The Lab into darkness for the local player
+  ambient!: THREE.AmbientLight
+  hemi!: THREE.HemisphereLight
+  moon!: THREE.DirectionalLight
+  private floraPulse: THREE.Sprite[] = []
+  private labSpecimens: THREE.Group[] = []
 
   private scene: THREE.Scene
   private wallMat = new THREE.MeshLambertMaterial({ color: 0x2a3230 })
@@ -75,6 +102,9 @@ export class Arena {
   private barMat = new THREE.MeshPhongMaterial({ color: 0x3a4145, shininess: 55 })
   private plankMat = new THREE.MeshLambertMaterial({ color: 0x4a3a22 })
   private rubbleMat = new THREE.MeshLambertMaterial({ color: 0x35393a })
+  private labWallMat = new THREE.MeshLambertMaterial({ color: 0x161c22 })
+  private labFloorMat = new THREE.MeshLambertMaterial({ color: 0x0d1013 })
+  private labTrimMat = new THREE.MeshLambertMaterial({ color: 0x20303a })
   // static geometry buckets, merged into one mesh per material after build
   private statics = new Map<THREE.Material, THREE.BufferGeometry[]>()
 
@@ -87,18 +117,37 @@ export class Arena {
     this.buildCells()
     this.buildProps()
     this.buildLights()
+    this.buildLab()
     this.mergeStatics()
-    // invisible world edge so nobody sprints off into the fog
-    const BX = 42
-    const BZ = 34
+    // invisible world edge so nobody sprints off into the fog (wraps jail + lab)
     const bounds: Collider[] = [
-      { minX: -BX - 2, maxX: BX + 2, minZ: -BZ - 2, maxZ: -BZ },
-      { minX: -BX - 2, maxX: BX + 2, minZ: BZ, maxZ: BZ + 2 },
-      { minX: -BX - 2, maxX: -BX, minZ: -BZ, maxZ: BZ },
-      { minX: BX, maxX: BX + 2, minZ: -BZ, maxZ: BZ },
+      { minX: LAB_X0 - 3, maxX: 44, minZ: LAB_Z0 - 3, maxZ: LAB_Z0 - 1 }, // far north
+      { minX: -44, maxX: 44, minZ: 34, maxZ: 36 }, // far south
+      { minX: -44, maxX: LAB_X0 - 1, minZ: LAB_Z0 - 3, maxZ: 36 }, // west
+      { minX: 42, maxX: 44, minZ: LAB_Z0 - 3, maxZ: 36 }, // east
     ]
     this.playerColliders.push(...bounds)
     this.zombieColliders.push(...bounds)
+  }
+
+  /** The dark basement region — used to swap the local player into pitch-black vision. */
+  isLab(x: number, z: number): boolean {
+    // includes the stairwell corridor so darkness creeps in as you descend
+    return z <= -23 && x >= LAB_X0 && x <= LAB_X1
+  }
+
+  /** Gentle bioluminescent breathing on the flora glow sprites + drifting specimens. */
+  updateFlora(t: number) {
+    for (let i = 0; i < this.floraPulse.length; i++) {
+      const s = this.floraPulse[i]
+      const base = s.userData.baseOpacity as number
+      ;(s.material as THREE.SpriteMaterial).opacity = base * (0.72 + 0.28 * Math.sin(t * 1.4 + i))
+    }
+    for (let i = 0; i < this.labSpecimens.length; i++) {
+      const spec = this.labSpecimens[i]
+      spec.rotation.y = t * 0.4 + i
+      spec.position.y = 1.3 + Math.sin(t * 0.9 + i) * 0.12 // bob in the fluid
+    }
   }
 
   // ---------------------------------------------------------------- geometry
@@ -160,32 +209,95 @@ export class Arena {
     this.scene.background = new THREE.Color(0x0a100a)
   }
 
-  /** Wall run along one axis, split by gaps; each gap becomes a zombie opening. */
+  /** Wall run along one axis, split by gaps; each gap becomes an opening/tunnel/clean gate gap. */
   private wallWithOpenings(
     axis: 'x' | 'z',
     fixed: number,
     from: number,
     to: number,
-    gaps: Array<{ at: number; roomId: number; kind: 'window' | 'breach' }>,
+    gaps: Array<{ at: number; roomId: number; kind: 'window' | 'breach' | 'tunnel' | 'gate' }>,
+    mat = this.wallMat,
+    height = H,
   ) {
     const sorted = [...gaps].sort((a, b) => a.at - b.at)
     let cursor = from
     for (const gap of sorted) {
-      const g0 = gap.at - WIN_W / 2
-      const g1 = gap.at + WIN_W / 2
-      this.wallSegment(axis, fixed, cursor, g0)
-      this.makeOpening(axis, fixed, gap.at, gap.roomId, gap.kind)
+      const w = gap.kind === 'gate' ? GATE_W : WIN_W
+      const g0 = gap.at - w / 2
+      const g1 = gap.at + w / 2
+      this.wallSegment(axis, fixed, cursor, g0, mat, height)
+      if (gap.kind === 'tunnel') this.makeTunnel(axis, fixed, gap.at, gap.roomId, height)
+      else if (gap.kind !== 'gate') this.makeOpening(axis, fixed, gap.at, gap.roomId, gap.kind)
       cursor = g1
     }
-    this.wallSegment(axis, fixed, cursor, to)
+    this.wallSegment(axis, fixed, cursor, to, mat, height)
   }
 
-  private wallSegment(axis: 'x' | 'z', fixed: number, from: number, to: number) {
+  private wallSegment(
+    axis: 'x' | 'z',
+    fixed: number,
+    from: number,
+    to: number,
+    mat = this.wallMat,
+    height = H,
+  ) {
     if (to - from < 0.05) return
     const len = to - from
     const mid = (from + to) / 2
-    if (axis === 'x') this.box(mid, fixed, len, T, H, this.wallMat)
-    else this.box(fixed, mid, T, len, H, this.wallMat)
+    if (axis === 'x') this.box(mid, fixed, len, T, height, mat)
+    else this.box(fixed, mid, T, len, height, mat)
+  }
+
+  /** A collapsed-wall spawn tunnel: fully blocks players, lets zombies crawl through from beyond. */
+  private makeTunnel(axis: 'x' | 'z', fixed: number, at: number, roomId: number, height: number) {
+    const isX = axis === 'x'
+    const w = isX ? WIN_W : T
+    const d = isX ? T : WIN_W
+    const cx = isX ? at : fixed
+    const cz = isX ? fixed : at
+    // full-height blocker — players cannot pass into the tunnel
+    this.playerColliders.push({
+      minX: cx - w / 2,
+      maxX: cx + w / 2,
+      minZ: cz - d / 2,
+      maxZ: cz + d / 2,
+      height: height + 1,
+    })
+    // jagged broken-wall rubble framing the breach (dark, needs light to see)
+    for (let i = 0; i < 5; i++) {
+      const chunk = new THREE.BoxGeometry(
+        isX ? 0.4 + Math.random() * 0.3 : T,
+        0.4 + Math.random() * 0.7,
+        isX ? T : 0.4 + Math.random() * 0.3,
+      )
+      const off = (Math.random() - 0.5) * WIN_W
+      chunk.translate(isX ? at + off : cx, 0.3 + Math.random() * 1.4, isX ? cz : at + off)
+      this.addStatic(chunk, this.labWallMat)
+    }
+    // faint green glow bleeding from the tunnel mouth
+    const glow = glowSprite(GLOW_BIO, 2.0, 0.4)
+    glow.position.set(cx, 1.2, cz)
+    this.scene.add(glow)
+
+    // spawn just outside the wall (in the tunnel), first waypoint just inside the lab
+    const off = 2.4
+    const outward = isX
+      ? new THREE.Vector3(at, 0, fixed + (fixed <= LAB_Z0 + T ? -off : off))
+      : new THREE.Vector3(fixed + (fixed <= LAB_X0 + T ? -off : off), 0, at)
+    const inside = isX
+      ? new THREE.Vector3(at, 0, fixed + (fixed <= LAB_Z0 + T ? off : -off))
+      : new THREE.Vector3(fixed + (fixed <= LAB_X0 + T ? off : -off), 0, at)
+    this.openings.push({
+      roomId,
+      outside: outward,
+      inside,
+      zone: {
+        minX: cx - w / 2 - 1,
+        maxX: cx + w / 2 + 1,
+        minZ: cz - d / 2 - 1,
+        maxZ: cz + d / 2 + 1,
+      },
+    })
   }
 
   private makeOpening(
@@ -281,8 +393,9 @@ export class Arena {
       { at: -15, roomId: 0, kind: 'breach' },
       { at: 15, roomId: 0, kind: 'breach' },
     ])
-    // north (z=Z0): windows into showers, armory (x2), warden
+    // north (z=Z0): a stairwell gate down to The Lab, plus windows into showers, armory (x2), warden
     this.wallWithOpenings('x', Z0, X0, X1, [
+      { at: STAIR_X, roomId: 1, kind: 'gate' },
       { at: -20, roomId: 1, kind: 'window' },
       { at: -5, roomId: 3, kind: 'window' },
       { at: 5, roomId: 3, kind: 'window' },
@@ -319,6 +432,7 @@ export class Arena {
       { name: 'SECURITY GATE', cost: 1250, x: 20, z: 0, axis: 'x', rooms: [0, 2] },
       { name: 'ARMORY GATE', cost: 2000, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
       { name: 'ARMORY GATE', cost: 2000, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
+      { name: 'THE LAB', cost: 10000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
     ]
     defs.forEach((d, id) => {
       const group = new THREE.Group()
@@ -424,12 +538,329 @@ export class Arena {
     for (const [x, z, w, d, h] of props) this.box(x, z, w, d, h, this.cellMat)
   }
 
+  // ---------------------------------------------------------------- the lab
+
+  private addBloom(
+    x: number,
+    y: number,
+    z: number,
+    stops: [string, string, string],
+    scale: number,
+    opacity: number,
+  ) {
+    const s = glowSprite(stops, scale, opacity)
+    s.position.set(x, y, z)
+    s.userData.baseOpacity = opacity
+    this.floraPulse.push(s)
+    this.scene.add(s)
+  }
+
+  private buildLab() {
+    const bioG = new THREE.MeshBasicMaterial({ color: 0x38ff78 })
+    const cyanG = new THREE.MeshBasicMaterial({ color: 0x40e8ff })
+    const violetG = new THREE.MeshBasicMaterial({ color: 0xb466ff })
+    const barkMat = new THREE.MeshBasicMaterial({ color: 0x0c1116 })
+    const glassMat = new THREE.MeshPhongMaterial({
+      color: 0x8fd8e8,
+      transparent: true,
+      opacity: 0.22,
+      shininess: 90,
+    })
+
+    // ---- stairwell corridor from the Showers down into the dark ----
+    for (const wx of [-28, -24]) {
+      this.wallSegment('z', wx, -28, -22, this.labWallMat, LAB_CEIL)
+    }
+    this.addFlatMesh(STAIR_X, 0.03, -25, GATE_W, 6, this.labFloorMat, -Math.PI / 2)
+    this.addFlatMesh(STAIR_X, LAB_CEIL, -25, GATE_W, 6, this.labWallMat, Math.PI / 2)
+
+    // ---- lab floor + ceiling (its own slab, well north of the jail ground) ----
+    const labW = LAB_X1 - LAB_X0
+    const labD = -28 - LAB_Z0
+    const labCX = (LAB_X0 + LAB_X1) / 2
+    const labCZ = (LAB_Z0 - 28) / 2
+    this.addFlatMesh(labCX, 0.03, labCZ, labW, labD, this.labFloorMat, -Math.PI / 2)
+    this.addFlatMesh(labCX, LAB_CEIL, labCZ, labW, labD, this.labWallMat, Math.PI / 2)
+
+    // ---- perimeter walls with player-proof spawn tunnels ----
+    this.wallWithOpenings('x', -28, LAB_X0, LAB_X1, [{ at: STAIR_X, roomId: 4, kind: 'gate' }], this.labWallMat, LAB_CEIL)
+    this.wallWithOpenings('x', LAB_Z0, LAB_X0, LAB_X1, [
+      { at: -20, roomId: 4, kind: 'tunnel' },
+      { at: 0, roomId: 4, kind: 'tunnel' },
+      { at: 20, roomId: 4, kind: 'tunnel' },
+    ], this.labWallMat, LAB_CEIL)
+    this.wallWithOpenings('z', LAB_X0, LAB_Z0, -28, [
+      { at: -40, roomId: 4, kind: 'tunnel' },
+      { at: -58, roomId: 4, kind: 'tunnel' },
+    ], this.labWallMat, LAB_CEIL)
+    this.wallWithOpenings('z', LAB_X1, LAB_Z0, -28, [
+      { at: -40, roomId: 4, kind: 'tunnel' },
+      { at: -58, roomId: 4, kind: 'tunnel' },
+    ], this.labWallMat, LAB_CEIL)
+
+    // ---- the central dome: a ring wall with a south-facing entrance ----
+    const domeSegs = 22
+    const entranceGap = Math.PI / 2 // south (+z) side stays open
+    for (let i = 0; i < domeSegs; i++) {
+      const a = (i / domeSegs) * Math.PI * 2
+      if (Math.abs(this.angleDelta(a, entranceGap)) < 0.42) continue // leave the doorway
+      const px = DOME_CX + Math.cos(a) * DOME_R
+      const pz = DOME_CZ + Math.sin(a) * DOME_R
+      const seg = new THREE.BoxGeometry(1.0, 3.6, 3.4)
+      seg.rotateY(-a)
+      seg.translate(px, 1.8, pz)
+      this.addStatic(seg, this.labTrimMat)
+      // players are walled out of the dome (enter via the south gap); zombies drift
+      // through the ornamental shell so they never wedge circling it
+      this.playerColliders.push({ minX: px - 1.4, maxX: px + 1.4, minZ: pz - 1.4, maxZ: pz + 1.4, height: 3.6 })
+      // cyan rim light on top of each dome segment
+      if (i % 2 === 0) this.addBloom(px, 3.4, pz, GLOW_CYAN, 1.6, 0.4)
+    }
+
+    // ---- the black luminescent tree at the dome's heart ----
+    const trunk = new THREE.CylinderGeometry(0.35, 0.6, 3.8, 8)
+    trunk.translate(DOME_CX, 1.9, DOME_CZ)
+    this.addStatic(trunk, barkMat)
+    for (const [bx, by, bz, len, ang] of [
+      [0.4, 3.2, 0.2, 2.2, 0.9],
+      [-0.5, 3.0, -0.3, 2.0, -0.8],
+      [0.1, 3.6, -0.5, 1.8, 0.3],
+      [-0.2, 2.6, 0.5, 1.6, -1.2],
+    ] as const) {
+      const branch = new THREE.CylinderGeometry(0.08, 0.16, len, 6)
+      branch.rotateZ(ang)
+      branch.translate(DOME_CX + bx, by, DOME_CZ + bz)
+      this.addStatic(branch, barkMat)
+    }
+    // glowing veins climbing the trunk + a bloom canopy
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const vein = new THREE.BoxGeometry(0.04, 3.4, 0.04)
+      vein.translate(DOME_CX + Math.cos(a) * 0.42, 1.9, DOME_CZ + Math.sin(a) * 0.42)
+      this.addStatic(vein, cyanG)
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = 0.6 + Math.random() * 1.9
+      this.addBloom(
+        DOME_CX + Math.cos(a) * r,
+        3.4 + Math.random() * 1.0,
+        DOME_CZ + Math.sin(a) * r,
+        i % 2 ? GLOW_VIOLET : GLOW_CYAN,
+        1.3 + Math.random(),
+        0.5,
+      )
+    }
+
+    // ---- luminescent flora carpeting the dome floor ----
+    this.scatterFlora(DOME_CX, DOME_CZ, DOME_R - 1.5, 30, [bioG, cyanG, violetG])
+
+    // ---- vines leeching out the dome entrance, south toward the lab ----
+    for (let i = 0; i < 12; i++) {
+      const t = i / 11
+      const vx = DOME_CX + (Math.random() - 0.5) * 3
+      const vz = DOME_CZ + DOME_R - 1 + t * 9
+      const vine = new THREE.BoxGeometry(0.12 + Math.random() * 0.1, 0.06, 1.4 + Math.random())
+      vine.rotateY((Math.random() - 0.5) * 0.7)
+      vine.translate(vx, 0.04, vz)
+      this.addStatic(vine, bioG)
+      if (i % 2 === 0) this.addBloom(vx, 0.15, vz, GLOW_BIO, 0.9, 0.4)
+    }
+
+    // ---- lab cubicles ringing the dome ----
+    const cubicleRing = DOME_R + 5.5
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.3
+      const cx = DOME_CX + Math.cos(a) * cubicleRing
+      const cz = DOME_CZ + Math.sin(a) * cubicleRing
+      if (cx < LAB_X0 + 3 || cx > LAB_X1 - 3 || cz < LAB_Z0 + 3 || cz > -31) continue
+      this.buildCubicle(cx, cz, -a)
+    }
+
+    // ---- specimen test tubes: six mutant strains, glowing in the black ----
+    const tubeColors: Array<[THREE.Material, [string, string, string]]> = [
+      [bioG, GLOW_BIO],
+      [cyanG, GLOW_CYAN],
+      [violetG, GLOW_VIOLET],
+      [bioG, GLOW_BIO],
+      [cyanG, GLOW_CYAN],
+      [violetG, GLOW_VIOLET],
+    ]
+    tubeColors.forEach(([mat, stops], i) => {
+      const a = (i / 6) * Math.PI * 2 + 0.8
+      const tx = DOME_CX + Math.cos(a) * (DOME_R + 2.6)
+      const tz = DOME_CZ + Math.sin(a) * (DOME_R + 2.6)
+      this.buildTestTube(tx, tz, glassMat, mat, stops, i)
+    })
+
+    // ---- light-source vendors, right at the bottom of the stairs ----
+    this.buildItemStation(FLASHLIGHT_POS.x, FLASHLIGHT_POS.z, 'FLASHLIGHT', '20000', GLOW_GOLD)
+    this.buildItemStation(NVG_POS.x, NVG_POS.z, 'NIGHT VISION', '40000', GLOW_CYAN)
+  }
+
+  private buildItemStation(x: number, z: number, top: string, bottom: string, stops: [string, string, string]) {
+    const pedestal = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 1.0, 0.9),
+      this.labTrimMat,
+    )
+    pedestal.position.set(x, 0.5, z)
+    this.scene.add(pedestal)
+    this.colliderMeshes.push(pedestal)
+    this.playerColliders.push({ minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5, height: 1.0 })
+    // a bright, always-visible glow so you can find the vendor in the dark
+    this.addBloom(x, 1.3, z, stops, 1.8, 0.7)
+    const label = makeLabelSprite([top, bottom])
+    label.position.set(x, 2.2, z)
+    this.scene.add(label)
+  }
+
+  private angleDelta(a: number, b: number): number {
+    let d = a - b
+    while (d > Math.PI) d -= Math.PI * 2
+    while (d < -Math.PI) d += Math.PI * 2
+    return d
+  }
+
+  private addFlatMesh(
+    cx: number,
+    y: number,
+    cz: number,
+    w: number,
+    d: number,
+    mat: THREE.Material,
+    rotX: number,
+  ) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat)
+    mesh.rotation.x = rotX
+    mesh.position.set(cx, y, cz)
+    this.scene.add(mesh)
+    this.colliderMeshes.push(mesh)
+  }
+
+  private scatterFlora(cx: number, cz: number, radius: number, count: number, mats: THREE.Material[]) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = Math.random() * radius
+      const x = cx + Math.cos(a) * r
+      const z = cz + Math.sin(a) * r
+      const mat = mats[Math.floor(Math.random() * mats.length)]
+      const kind = Math.random()
+      if (kind < 0.4) {
+        // mushroom: stem + cap
+        const stem = new THREE.CylinderGeometry(0.04, 0.06, 0.28, 5)
+        stem.translate(x, 0.14, z)
+        this.addStatic(stem, new THREE.MeshBasicMaterial({ color: 0x203028 }))
+        const cap = new THREE.SphereGeometry(0.16, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2)
+        cap.translate(x, 0.28, z)
+        this.addStatic(cap, mat)
+        this.addBloom(x, 0.32, z, GLOW_BIO, 0.7, 0.35)
+      } else if (kind < 0.75) {
+        // grass/fungi blades
+        for (let b = 0; b < 3; b++) {
+          const blade = new THREE.BoxGeometry(0.03, 0.3 + Math.random() * 0.3, 0.03)
+          blade.rotateZ((Math.random() - 0.5) * 0.5)
+          blade.translate(x + (Math.random() - 0.5) * 0.3, 0.2, z + (Math.random() - 0.5) * 0.3)
+          this.addStatic(blade, mat)
+        }
+      } else {
+        // glowing pod
+        const pod = new THREE.SphereGeometry(0.1 + Math.random() * 0.1, 8, 6)
+        pod.translate(x, 0.12, z)
+        this.addStatic(pod, mat)
+        this.addBloom(x, 0.14, z, GLOW_VIOLET, 0.55, 0.3)
+      }
+    }
+  }
+
+  private buildCubicle(cx: number, cz: number, rot: number) {
+    const g = new THREE.Group()
+    g.position.set(cx, 0, cz)
+    g.rotation.y = rot
+    const parts: THREE.BufferGeometry[] = []
+    // two partition walls forming an L
+    const back = new THREE.BoxGeometry(2.6, 1.8, 0.12)
+    back.translate(0, 0.9, -1.2)
+    parts.push(back)
+    const side = new THREE.BoxGeometry(0.12, 1.8, 2.4)
+    side.translate(-1.3, 0.9, 0)
+    parts.push(side)
+    // a desk / lab bench
+    const desk = new THREE.BoxGeometry(2.2, 0.1, 0.8)
+    desk.translate(0, 0.85, -0.7)
+    parts.push(desk)
+    const mesh = new THREE.Mesh(mergeGeometries(parts), this.labTrimMat)
+    g.add(mesh)
+    this.scene.add(g)
+    this.colliderMeshes.push(mesh)
+    // a small monitor glow on the desk
+    const monitor = glowSprite(GLOW_CYAN, 0.8, 0.35)
+    monitor.position.set(cx, 1.15, cz)
+    monitor.userData.baseOpacity = 0.35
+    this.floraPulse.push(monitor)
+    this.scene.add(monitor)
+    // knee-high partition footprint so you can duck into the cubicle but not phase through the bench
+    this.playerColliders.push({ minX: cx - 1.5, maxX: cx + 1.5, minZ: cz - 1.5, maxZ: cz + 1.5, height: 0.95 })
+  }
+
+  private buildTestTube(
+    x: number,
+    z: number,
+    glassMat: THREE.Material,
+    specimenMat: THREE.Material,
+    stops: [string, string, string],
+    variant: number,
+  ) {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.3, 12), this.labTrimMat)
+    base.position.set(x, 0.15, z)
+    this.scene.add(base)
+    this.colliderMeshes.push(base)
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2.2, 12, 1, true), glassMat)
+    glass.position.set(x, 1.4, z)
+    this.scene.add(glass)
+    // a floating mutant specimen — a different silhouette per tube
+    const spec = new THREE.Group()
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.4, 0.16), specimenMat)
+    spec.add(body)
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), specimenMat)
+    head.position.y = 0.32
+    spec.add(head)
+    if (variant % 3 === 0) {
+      // extra arms
+      for (const s of [-1, 1]) {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.06), specimenMat)
+        arm.position.set(s * 0.25, 0.1, 0)
+        spec.add(arm)
+      }
+    } else if (variant % 3 === 1) {
+      // bloated
+      body.scale.set(1.6, 1.1, 1.6)
+    } else {
+      // spindly tall
+      body.scale.set(0.6, 1.6, 0.6)
+      head.scale.setScalar(0.7)
+    }
+    spec.position.set(x, 1.3, z)
+    spec.name = `specimen-${variant}`
+    this.scene.add(spec)
+    this.labSpecimens.push(spec)
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.16, 12), this.labTrimMat)
+    cap.position.set(x, 2.55, z)
+    this.scene.add(cap)
+    this.colliderMeshes.push(cap)
+    this.addBloom(x, 1.4, z, stops, 1.2, 0.45)
+    // a tube blocks movement
+    this.playerColliders.push({ minX: x - 0.42, maxX: x + 0.42, minZ: z - 0.42, maxZ: z + 0.42, height: 2.6 })
+    this.zombieColliders.push({ minX: x - 0.42, maxX: x + 0.42, minZ: z - 0.42, maxZ: z + 0.42, height: 2.6 })
+  }
+
   private buildLights() {
-    this.scene.add(new THREE.AmbientLight(0x3d4f42, 2.1))
-    this.scene.add(new THREE.HemisphereLight(0x46543f, 0x181512, 1.8))
-    const moon = new THREE.DirectionalLight(0x51624a, 0.9)
-    moon.position.set(-10, 20, -6)
-    this.scene.add(moon)
+    this.ambient = new THREE.AmbientLight(0x3d4f42, 2.1)
+    this.scene.add(this.ambient)
+    this.hemi = new THREE.HemisphereLight(0x46543f, 0x181512, 1.8)
+    this.scene.add(this.hemi)
+    this.moon = new THREE.DirectionalLight(0x51624a, 0.9)
+    this.moon.position.set(-10, 20, -6)
+    this.scene.add(this.moon)
     // failing prison floodlights — three across the cell block, one per wing
     for (const [x, z] of [
       [-20, 11],
@@ -447,11 +878,11 @@ export class Arena {
 
   // ---------------------------------------------------------------- gameplay
 
-  /** Spawn points for all currently-open rooms. */
-  activeSpawns(): THREE.Vector3[] {
+  /** Spawn points for all currently-open rooms; lab spawns are flagged luminescent. */
+  activeSpawns(): Array<{ pos: THREE.Vector3; lab: boolean }> {
     return this.openings
       .filter((o) => this.rooms[o.roomId].open)
-      .map((o) => o.outside)
+      .map((o) => ({ pos: o.outside, lab: o.roomId === 4 }))
   }
 
   roomOf(x: number, z: number): number {
@@ -536,9 +967,9 @@ export class Arena {
     const rb = this.roomOf(target.x, target.z)
     if (ra === rb) return target
     if (ra === -1) {
-      // outside the building: crawl in through an opening of the target's room
-      // (falls back to the nearest opening anywhere if the target is also outside)
-      const o = this.nearestOpening(pos, rb === -1 ? null : rb)
+      // outside the building (a spawn tunnel/window): crawl in through the nearest
+      // opening — almost always its own — then the room graph routes it onward
+      const o = this.nearestOpening(pos, null)
       return o ? o.inside : target
     }
     if (rb === -1) {

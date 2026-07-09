@@ -15,6 +15,8 @@ export class Hud {
   private crosshairEl: HTMLElement
   private scopeEl: HTMLElement
   private midgetEl: HTMLElement
+  private lightEl: HTMLElement
+  private lastLight = ''
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private hitTimer: ReturnType<typeof setTimeout> | null = null
   // last-written values — these setters run every frame, the DOM should not
@@ -42,6 +44,7 @@ export class Hud {
       <div id="prompt"></div>
       <div id="hitmarker"></div>
       <div id="weapon-name"></div>
+      <div id="light-status"></div>
       <div id="ammo">--</div>
       <div id="hint">${
         isTouch
@@ -68,6 +71,7 @@ export class Hud {
     this.crosshairEl = this.root.querySelector('#crosshair')!
     this.scopeEl = this.root.querySelector('#scope-overlay')!
     this.midgetEl = this.root.querySelector('#midget-overlay')!
+    this.lightEl = this.root.querySelector('#light-status')!
     this.root.querySelector('#pause-btn')!.addEventListener('click', () => this.onPause?.())
   }
 
@@ -98,6 +102,24 @@ export class Hud {
     if (active === this.midgetActive) return
     this.midgetActive = active
     this.midgetEl.classList.toggle('active', active)
+  }
+
+  setLightStatus(
+    inLab: boolean,
+    mode: 'off' | 'flashlight' | 'nvg',
+    ownsFlash: boolean,
+    ownsNvg: boolean,
+  ) {
+    let text = ''
+    if (inLab) {
+      if (mode === 'flashlight') text = '🔦 FLASHLIGHT · T'
+      else if (mode === 'nvg') text = '🥽 NIGHT VISION · T'
+      else text = ownsFlash || ownsNvg ? '🌑 LIGHT OFF · T' : '🌑 PITCH BLACK'
+    }
+    if (text === this.lastLight) return
+    this.lastLight = text
+    this.lightEl.textContent = text
+    this.lightEl.style.display = text ? 'block' : 'none'
   }
 
   setWeaponName(name: string) {

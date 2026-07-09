@@ -42,6 +42,21 @@ export const GLOW_GOLD: [string, string, string] = [
   'rgba(224,192,32,0.45)',
   'rgba(224,192,32,0)',
 ]
+export const GLOW_CYAN: [string, string, string] = [
+  'rgba(120,255,250,0.95)',
+  'rgba(40,200,220,0.5)',
+  'rgba(40,200,220,0)',
+]
+export const GLOW_BIO: [string, string, string] = [
+  'rgba(150,255,150,0.95)',
+  'rgba(60,230,110,0.5)',
+  'rgba(60,230,110,0)',
+]
+export const GLOW_VIOLET: [string, string, string] = [
+  'rgba(200,140,255,0.95)',
+  'rgba(150,70,240,0.5)',
+  'rgba(150,70,240,0)',
+]
 
 const TRACER_LIFE = 0.055
 const SPARK_LIFE = 0.12

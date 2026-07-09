@@ -63,6 +63,7 @@ export class Zombie {
   speed: number
   runner: boolean
   isMidget: boolean
+  luminescent: boolean
   state: ZombieState = 'chasing'
   dead = false // fully finished (despawn)
 
@@ -100,12 +101,14 @@ export class Zombie {
     runner: boolean,
     isMidget = false,
     wave = 1,
+    luminescent = false,
   ) {
     this.scene = scene
     this.hp = hp
     this.maxHp = hp
     this.runner = runner
     this.isMidget = isMidget
+    this.luminescent = luminescent
     if (isMidget) {
       this.speed = 2.4 + Math.random() * 0.5 // ground-scuttle speed between jumps
     } else if (runner) {
@@ -114,7 +117,7 @@ export class Zombie {
     } else {
       this.speed = 1.5 + Math.random() * 0.7
     }
-    const { group, parts } = buildZombieMesh(runner)
+    const { group, parts } = buildZombieMesh(runner, luminescent)
     this.group = group
     this.parts = parts
     if (isMidget) group.scale.setScalar(MIDGET_SCALE)
@@ -437,20 +440,33 @@ export class Zombie {
 }
 
 /** Exported for client-side rendering of host-simulated zombies. */
-export function buildZombieMeshExternal(runner: boolean): { group: THREE.Group; parts: Parts } {
-  return buildZombieMesh(runner)
+export function buildZombieMeshExternal(
+  runner: boolean,
+  luminescent = false,
+): { group: THREE.Group; parts: Parts } {
+  return buildZombieMesh(runner, luminescent)
 }
 
-function buildZombieMesh(runner: boolean): { group: THREE.Group; parts: Parts } {
+function buildZombieMesh(
+  runner: boolean,
+  luminescent = false,
+): { group: THREE.Group; parts: Parts } {
   const group = new THREE.Group()
-  // rotting skin: sickly green-grey, runners redder
-  const hue = runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1
+  // rotting skin: sickly green-grey, runners redder; lab specimens glow in the dark
+  const hue = luminescent ? 0.42 : runner ? 0.02 + Math.random() * 0.03 : 0.24 + Math.random() * 0.1
   const skin = new THREE.MeshLambertMaterial({
     color: new THREE.Color().setHSL(hue, 0.35, 0.22 + Math.random() * 0.1),
   })
   const cloth = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(Math.random(), 0.15, 0.12 + Math.random() * 0.08),
+    color: new THREE.Color().setHSL(luminescent ? 0.5 : Math.random(), 0.2, 0.12 + Math.random() * 0.08),
   })
+  if (luminescent) {
+    // emissive makes them self-lit — the only zombies you can see in the pitch-black Lab
+    skin.emissive = new THREE.Color(0x1cff9a)
+    skin.emissiveIntensity = 0.9
+    cloth.emissive = new THREE.Color(0x1060ff)
+    cloth.emissiveIntensity = 0.7
+  }
 
   const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.58, 0.16), cloth)
   legL.position.set(-0.12, 0.29, 0)

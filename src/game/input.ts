@@ -17,6 +17,7 @@ export class Input {
   private jumpPresses = 0
   private crouchPresses = 0
   private meleePresses = 0
+  private lightPresses = 0
   private joyX = 0
   private joyY = 0
   private canvas: HTMLCanvasElement
@@ -112,6 +113,14 @@ export class Input {
     return false
   }
 
+  consumeLightToggle(): boolean {
+    if (this.lightPresses > 0) {
+      this.lightPresses--
+      return true
+    }
+    return false
+  }
+
   requestLock() {
     if (!this.isTouch && !this.locked) this.canvas.requestPointerLock()
   }
@@ -129,6 +138,7 @@ export class Input {
       if (e.code === 'Space') this.jumpPresses++
       if (e.code === 'KeyC' || e.code === 'ControlLeft') this.crouchPresses++
       if (e.code === 'KeyV') this.meleePresses++
+      if (e.code === 'KeyT') this.lightPresses++
     })
     document.addEventListener('keyup', (e) => this.keys.delete(e.code))
     window.addEventListener('blur', () => this.keys.clear())
@@ -179,6 +189,7 @@ export class Input {
       <button id="btn-jump">▲</button>
       <button id="btn-crouch">⤓</button>
       <button id="btn-melee">✊</button>
+      <button id="btn-light">🔦</button>
       <button id="btn-interact">USE</button>
     `
     document.getElementById('app')!.appendChild(root)
@@ -292,6 +303,10 @@ export class Input {
     root.querySelector('#btn-melee')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.meleePresses++
+    })
+    root.querySelector('#btn-light')!.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      this.lightPresses++
     })
   }
 }

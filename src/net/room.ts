@@ -22,6 +22,7 @@ export type ZombieState = [
   state: 0 | 1 | 2, // 0 chasing, 1 attacking, 2 dying
   runner: 0 | 1,
   midget: 0 | 1,
+  lum: 0 | 1,
 ]
 
 /** A midget currently latched onto someone's head: [zombie id, target id]. */

@@ -86,6 +86,7 @@ interface RemoteZombie {
   state: number
   runner: boolean
   midget: boolean
+  luminescent: boolean
   animT: number
   deathT: number
   parts: ReturnType<typeof buildZombieMeshExternal>['parts']
@@ -103,11 +104,11 @@ export class RemoteZombieField {
   /** Reconcile against the authoritative list from the host. */
   applyState(list: ZombieState[]) {
     const seen = new Set<number>()
-    for (const [id, x, z, ry, state, runner, midget] of list) {
+    for (const [id, x, z, ry, state, runner, midget, lum] of list) {
       seen.add(id)
       let rz = this.zombies.get(id)
       if (!rz) {
-        const built = buildZombieMeshExternal(runner === 1)
+        const built = buildZombieMeshExternal(runner === 1, lum === 1)
         if (midget === 1) built.group.scale.setScalar(0.25)
         built.group.position.set(x, 0, z)
         built.group.userData.zombieId = id
@@ -120,6 +121,7 @@ export class RemoteZombieField {
           state,
           runner: runner === 1,
           midget: midget === 1,
+          luminescent: lum === 1,
           animT: Math.random() * 10,
           deathT: 0,
           parts: built.parts,
@@ -170,12 +172,20 @@ export class RemoteZombieField {
   }
 
   /** Host migration: hand the last-known horde layout to a newly-promoted host. */
-  snapshot(): Array<{ x: number; z: number; runner: boolean; midget: boolean; dying: boolean }> {
+  snapshot(): Array<{
+    x: number
+    z: number
+    runner: boolean
+    midget: boolean
+    luminescent: boolean
+    dying: boolean
+  }> {
     return [...this.zombies.values()].map((rz) => ({
       x: rz.group.position.x,
       z: rz.group.position.z,
       runner: rz.runner,
       midget: rz.midget,
+      luminescent: rz.luminescent,
       dying: rz.state === 2,
     }))
   }

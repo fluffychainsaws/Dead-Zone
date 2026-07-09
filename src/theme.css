@@ -773,6 +773,20 @@ body {
   color: var(--text-dim);
 }
 
+#light-status {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 44px);
+  transform: translateX(-50%);
+  display: none;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.16em;
+  color: #6cf0ff;
+  text-shadow: 0 0 10px rgba(60, 220, 255, 0.6);
+  white-space: nowrap;
+}
+
 #ammo {
   position: absolute;
   right: calc(env(safe-area-inset-right) + 18px);
@@ -1075,6 +1089,15 @@ body {
   height: 56px;
   font-size: 1.3rem;
   border-color: rgba(224, 32, 32, 0.5);
+}
+
+#btn-light {
+  right: calc(env(safe-area-inset-right) + 210px);
+  bottom: calc(env(safe-area-inset-bottom) + 190px);
+  width: 52px;
+  height: 52px;
+  font-size: 1.2rem;
+  border-color: rgba(108, 240, 255, 0.5);
 }
 
 #btn-interact {

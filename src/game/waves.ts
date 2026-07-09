@@ -33,8 +33,15 @@ export class Horde {
     return this.zombies.filter((z) => z.alive).map((z) => z.group)
   }
 
-  spawn(pos: THREE.Vector3, hp: number, runner: boolean, isMidget = false, wave = 1): Zombie {
-    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave)
+  spawn(
+    pos: THREE.Vector3,
+    hp: number,
+    runner: boolean,
+    isMidget = false,
+    wave = 1,
+    luminescent = false,
+  ): Zombie {
+    const z = new Zombie(this.scene, pos, hp, runner, isMidget, wave, luminescent)
     this.zombies.push(z)
     return z
   }
@@ -103,10 +110,14 @@ export class WaveSystem {
   private pendingSpawns = 0
   private spawnTimer = 0
   private horde: Horde
-  private getSpawns: () => THREE.Vector3[]
+  private getSpawns: () => Array<{ pos: THREE.Vector3; lab: boolean }>
   private events: WaveEvents
 
-  constructor(horde: Horde, getSpawns: () => THREE.Vector3[], events: WaveEvents = {}) {
+  constructor(
+    horde: Horde,
+    getSpawns: () => Array<{ pos: THREE.Vector3; lab: boolean }>,
+    events: WaveEvents = {},
+  ) {
     this.horde = horde
     this.getSpawns = getSpawns
     this.events = events
@@ -185,7 +196,7 @@ export class WaveSystem {
         if (spawns.length === 0) return
         this.spawnTimer = SPAWN_INTERVAL
         this.pendingSpawns--
-        const p = spawns[Math.floor(Math.random() * spawns.length)]
+        const spot = spawns[Math.floor(Math.random() * spawns.length)]
         const jitter = new THREE.Vector3(
           (Math.random() - 0.5) * 1.4,
           0,
@@ -194,11 +205,12 @@ export class WaveSystem {
         const isMidget = Math.random() < this.midgetChance(this.wave)
         const runner = !isMidget && Math.random() < this.runnerChance(this.wave)
         this.horde.spawn(
-          p.clone().add(jitter),
+          spot.pos.clone().add(jitter),
           isMidget ? Math.round(this.zombieHp(this.wave) / 2) : this.zombieHp(this.wave),
           runner,
           isMidget,
           this.wave,
+          spot.lab, // lab spawns glow in the dark
         )
       }
     } else if (this.horde.aliveCount === 0) {
