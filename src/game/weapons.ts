@@ -52,6 +52,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.012,
     auto: false,
     pellets: 1,
+    ads: { zoom: 0.92 },
   },
   garand: {
     id: 'garand',
@@ -65,6 +66,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.006,
     auto: false,
     pellets: 1,
+    ads: { zoom: 0.8 },
   },
   trench: {
     id: 'trench',
@@ -78,6 +80,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.065,
     auto: false,
     pellets: 8,
+    ads: { zoom: 0.95 },
   },
   kurz: {
     id: 'kurz',
@@ -91,6 +94,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.028,
     auto: true,
     pellets: 1,
+    ads: { zoom: 0.9 },
   },
   magnum: {
     id: 'magnum',
@@ -104,6 +108,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.005,
     auto: false,
     pellets: 1,
+    ads: { zoom: 0.9 },
   },
   liberator: {
     id: 'liberator',
@@ -117,6 +122,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.02,
     auto: true,
     pellets: 1,
+    ads: { zoom: 0.88 },
   },
   hellfire: {
     id: 'hellfire',
@@ -130,6 +136,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     spread: 0.08,
     auto: true,
     pellets: 8,
+    ads: { zoom: 0.95 },
   },
   grinder: {
     id: 'grinder',
@@ -144,6 +151,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     auto: true,
     pellets: 1,
     model: 'mg',
+    ads: { zoom: 0.9 },
   },
 }
 
@@ -160,21 +168,21 @@ const box = (
 ): WeaponDef => ({ id, name, model, ads, ...stats })
 
 export const BOX_WEAPONS: WeaponDef[] = [
-  box('vampir', 'VAMPIR MP40', 'ww2smg', { damage: 30, headshotMult: 2.2, rpm: 850, magSize: 40, maxReserve: 240, reloadTime: 2.0, spread: 0.03, auto: true, pellets: 1 }),
-  box('reaper', 'REAPER SAW', 'saw', { damage: 40, headshotMult: 2.4, rpm: 600, magSize: 120, maxReserve: 360, reloadTime: 4.2, spread: 0.032, auto: true, pellets: 1 }),
-  box('dragon', 'DRAGON’S BREATH', 'trench', { damage: 15, headshotMult: 2, rpm: 90, magSize: 8, maxReserve: 56, reloadTime: 2.4, spread: 0.09, auto: false, pellets: 10 }),
-  box('longtooth', 'LONGTOOTH', 'sniper', { damage: 250, headshotMult: 5, rpm: 45, magSize: 5, maxReserve: 40, reloadTime: 2.8, spread: 0.001, auto: false, pellets: 1 }),
-  box('twins', 'THE TWINS', 'pistol', { damage: 34, headshotMult: 2.5, rpm: 900, magSize: 16, maxReserve: 128, reloadTime: 1.8, spread: 0.04, auto: true, pellets: 1 }),
-  box('ripsaw', 'RIPSAW', 'mg', { damage: 34, headshotMult: 2.2, rpm: 1000, magSize: 150, maxReserve: 300, reloadTime: 4.6, spread: 0.045, auto: true, pellets: 1 }),
-  box('judge', 'THE JUDGE', 'magnum', { damage: 130, headshotMult: 4, rpm: 120, magSize: 5, maxReserve: 40, reloadTime: 2.2, spread: 0.004, auto: false, pellets: 1 }),
-  box('sweeper', 'STREET SWEEPER', 'hellfire', { damage: 13, headshotMult: 2, rpm: 240, magSize: 12, maxReserve: 72, reloadTime: 2.8, spread: 0.085, auto: true, pellets: 8 }),
-  box('needler', 'NEEDLER-47', 'vietnam', { damage: 20, headshotMult: 2.2, rpm: 1100, magSize: 60, maxReserve: 300, reloadTime: 2.2, spread: 0.035, auto: true, pellets: 1 }),
-  box('bear', 'BEAR KILLER', 'garand', { damage: 110, headshotMult: 3.5, rpm: 140, magSize: 10, maxReserve: 80, reloadTime: 2.0, spread: 0.006, auto: false, pellets: 1 }),
-  box('spitfire', 'SPITFIRE', 'mg', { damage: 28, headshotMult: 2.2, rpm: 750, magSize: 100, maxReserve: 400, reloadTime: 3.6, spread: 0.03, auto: true, pellets: 1 }),
-  box('widow', 'WIDOWMAKER', 'liberator', { damage: 85, headshotMult: 3, rpm: 260, magSize: 12, maxReserve: 96, reloadTime: 2.0, spread: 0.004, auto: false, pellets: 1 }),
-  box('hammer', 'WAR HAMMER', 'mg', { damage: 55, headshotMult: 2.5, rpm: 420, magSize: 110, maxReserve: 220, reloadTime: 4.4, spread: 0.04, auto: true, pellets: 1 }),
-  box('hornet', 'HORNET', 'pistol', { damage: 22, headshotMult: 2.2, rpm: 950, magSize: 30, maxReserve: 210, reloadTime: 1.7, spread: 0.05, auto: true, pellets: 1 }),
-  box('goliath', 'GOLIATH .50', 'sniper', { damage: 400, headshotMult: 4, rpm: 30, magSize: 3, maxReserve: 21, reloadTime: 3.4, spread: 0.002, auto: false, pellets: 1 }),
+  box('vampir', 'VAMPIR MP40', 'ww2smg', { damage: 30, headshotMult: 2.2, rpm: 850, magSize: 40, maxReserve: 240, reloadTime: 2.0, spread: 0.03, auto: true, pellets: 1 }, { zoom: 0.88 }),
+  box('reaper', 'REAPER SAW', 'saw', { damage: 40, headshotMult: 2.4, rpm: 600, magSize: 120, maxReserve: 360, reloadTime: 4.2, spread: 0.032, auto: true, pellets: 1 }, { zoom: 0.9 }),
+  box('dragon', 'DRAGON’S BREATH', 'trench', { damage: 15, headshotMult: 2, rpm: 90, magSize: 8, maxReserve: 56, reloadTime: 2.4, spread: 0.09, auto: false, pellets: 10 }, { zoom: 0.95 }),
+  box('longtooth', 'LONGTOOTH', 'sniper', { damage: 250, headshotMult: 5, rpm: 45, magSize: 5, maxReserve: 40, reloadTime: 2.8, spread: 0.001, auto: false, pellets: 1 }, { zoom: 0.35, scope: true }),
+  box('twins', 'THE TWINS', 'pistol', { damage: 34, headshotMult: 2.5, rpm: 900, magSize: 16, maxReserve: 128, reloadTime: 1.8, spread: 0.04, auto: true, pellets: 1 }, { zoom: 0.9 }),
+  box('ripsaw', 'RIPSAW', 'mg', { damage: 34, headshotMult: 2.2, rpm: 1000, magSize: 150, maxReserve: 300, reloadTime: 4.6, spread: 0.045, auto: true, pellets: 1 }, { zoom: 0.9 }),
+  box('judge', 'THE JUDGE', 'magnum', { damage: 130, headshotMult: 4, rpm: 120, magSize: 5, maxReserve: 40, reloadTime: 2.2, spread: 0.004, auto: false, pellets: 1 }, { zoom: 0.88 }),
+  box('sweeper', 'STREET SWEEPER', 'hellfire', { damage: 13, headshotMult: 2, rpm: 240, magSize: 12, maxReserve: 72, reloadTime: 2.8, spread: 0.085, auto: true, pellets: 8 }, { zoom: 0.95 }),
+  box('needler', 'NEEDLER-47', 'vietnam', { damage: 20, headshotMult: 2.2, rpm: 1100, magSize: 60, maxReserve: 300, reloadTime: 2.2, spread: 0.035, auto: true, pellets: 1 }, { zoom: 0.88 }),
+  box('bear', 'BEAR KILLER', 'garand', { damage: 110, headshotMult: 3.5, rpm: 140, magSize: 10, maxReserve: 80, reloadTime: 2.0, spread: 0.006, auto: false, pellets: 1 }, { zoom: 0.8 }),
+  box('spitfire', 'SPITFIRE', 'mg', { damage: 28, headshotMult: 2.2, rpm: 750, magSize: 100, maxReserve: 400, reloadTime: 3.6, spread: 0.03, auto: true, pellets: 1 }, { zoom: 0.9 }),
+  box('widow', 'WIDOWMAKER', 'liberator', { damage: 85, headshotMult: 3, rpm: 260, magSize: 12, maxReserve: 96, reloadTime: 2.0, spread: 0.004, auto: false, pellets: 1 }, { zoom: 0.88 }),
+  box('hammer', 'WAR HAMMER', 'mg', { damage: 55, headshotMult: 2.5, rpm: 420, magSize: 110, maxReserve: 220, reloadTime: 4.4, spread: 0.04, auto: true, pellets: 1 }, { zoom: 0.9 }),
+  box('hornet', 'HORNET', 'pistol', { damage: 22, headshotMult: 2.2, rpm: 950, magSize: 30, maxReserve: 210, reloadTime: 1.7, spread: 0.05, auto: true, pellets: 1 }, { zoom: 0.92 }),
+  box('goliath', 'GOLIATH .50', 'sniper', { damage: 400, headshotMult: 4, rpm: 30, magSize: 3, maxReserve: 21, reloadTime: 3.4, spread: 0.002, auto: false, pellets: 1 }, { zoom: 0.3, scope: true }),
 
   // ---- real-world-inspired arsenal ----
   box('m4carbine', 'M4 CARBINE', 'm4', { damage: 40, headshotMult: 2.6, rpm: 750, magSize: 30, maxReserve: 240, reloadTime: 2.0, spread: 0.018, auto: true, pellets: 1 }, { zoom: 0.82 }),
@@ -462,19 +470,23 @@ export class WeaponSystem {
     const vm = this.active.viewmodel
     // gun-bash melee: a quick forward-and-down thrust, independent of firing kick
     const meleeK = this.meleeT > 0 ? Math.sin((1 - this.meleeT / 0.25) * Math.PI) : 0
-    // ADS: raise the sights toward center screen; scoped weapons go further and hide behind the overlay
+    // ADS: raise the sights toward center screen. Kept close to the hip depth (rather
+    // than pulled in tight to the camera) and slightly scaled down so the gun's body
+    // doesn't balloon up and block the view — only the sight itself should sit on the
+    // crosshair. Scoped weapons go further and hide behind the scope overlay instead.
     const hipX = 0.28
     const hipY = -0.26
     const hipZ = -0.55
     const aimX = 0
-    const aimY = -0.08
-    const aimZ = -0.34
+    const aimY = -0.15
+    const aimZ = -0.5
     const k = this.aimK
     vm.position.set(
       hipX + (aimX - hipX) * k,
       hipY + (aimY - hipY) * k - this.kick * 0.01 - meleeK * 0.05,
       hipZ + (aimZ - hipZ) * k + this.kick * 0.06 - meleeK * 0.35,
     )
+    vm.scale.setScalar(1 - 0.14 * k)
     vm.rotation.x = this.kick * 0.09 - meleeK * 0.5
   }
 }
