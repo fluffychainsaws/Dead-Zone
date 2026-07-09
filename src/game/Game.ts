@@ -113,6 +113,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     this.arena = buildArena(this.scene)
     this.scene.add(this.camera) // so viewmodel (camera child) renders
+    this.player.attachBody(this.scene) // first-person legs, visible looking down
     // dim carry-light so the viewmodel and nearby ground stay readable
     const carryLight = new THREE.PointLight(0x99aa88, 3.5, 7, 1.5)
     carryLight.position.set(0, 0.2, -0.3)
@@ -1120,6 +1121,7 @@ export class Game {
               .map((z) => z.group.position)
       this.player.collideWithBodies(bodies, 0.38, this.arena.playerColliders)
       this.player.applyCamera(this.camera)
+      this.player.updateBody()
       this.updateVision()
       this.arena.updateFlora(this.clock.getElapsedTime())
 

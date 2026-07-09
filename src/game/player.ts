@@ -54,6 +54,12 @@ export class Player {
   private static readonly REGEN_DELAY = 4
   private static readonly REGEN_RATE = 20
 
+  // first-person legs — world-space, follow yaw only (not pitch), so looking
+  // down actually shows them walking
+  private legGroup: THREE.Group | null = null
+  private legL: THREE.Mesh | null = null
+  private legR: THREE.Mesh | null = null
+
   /** Floors hp at 0 — the Game decides whether that means downed or dead. */
   takeDamage(amount: number) {
     if (!this.alive || this.downed || amount <= 0) return
@@ -68,6 +74,32 @@ export class Player {
 
   get recentlyHit(): boolean {
     return this.time - this.lastHitAt < 0.35
+  }
+
+  /** Builds the first-person leg mesh — call once, after the player exists. */
+  attachBody(scene: THREE.Scene) {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x2e3b2a })
+    this.legGroup = new THREE.Group()
+    const legGeo = new THREE.BoxGeometry(0.16, 0.58, 0.16)
+    legGeo.translate(0, -0.29, 0) // pivot at the hip
+    this.legL = new THREE.Mesh(legGeo, mat)
+    this.legL.position.set(-0.12, 0.58, 0)
+    this.legR = new THREE.Mesh(legGeo.clone(), mat)
+    this.legR.position.set(0.12, 0.58, 0)
+    this.legGroup.add(this.legL, this.legR)
+    scene.add(this.legGroup)
+  }
+
+  /** Positions and animates the legs — call every frame after update(). */
+  updateBody() {
+    if (!this.legGroup || !this.legL || !this.legR) return
+    this.legGroup.visible = this.alive && !this.downed
+    this.legGroup.position.set(this.pos.x, this.pos.y, this.pos.z)
+    this.legGroup.rotation.y = this.yaw
+    this.legGroup.scale.y = 1 - this.crouchT * 0.28
+    const swing = this.grounded ? Math.sin(this.bobT) * 0.5 : 0.35
+    this.legL.rotation.x = swing
+    this.legR.rotation.x = -swing
   }
 
   update(dt: number, input: Input, colliders: Collider[], slowed = false, grabbed = false) {

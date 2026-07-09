@@ -36,6 +36,10 @@ export class RemotePlayer {
   private targetPos = new THREE.Vector3()
   private targetYaw = 0
   private crouchT = 0
+  private legL: THREE.Mesh
+  private legR: THREE.Mesh
+  private walkT = 0
+  private lastPos = new THREE.Vector3()
 
   constructor(scene: THREE.Scene, name: string) {
     this.group = new THREE.Group()
@@ -45,8 +49,12 @@ export class RemotePlayer {
     body.position.y = 1.0
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.26, 0.24), skin)
     head.position.y = 1.48
-    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.66, 0.24), uniform)
-    legs.position.y = 0.36
+    const legGeo = new THREE.BoxGeometry(0.18, 0.66, 0.22)
+    legGeo.translate(0, -0.33, 0) // pivot at the hip
+    this.legL = new THREE.Mesh(legGeo, uniform)
+    this.legL.position.set(-0.11, 0.66, 0)
+    this.legR = new THREE.Mesh(legGeo.clone(), uniform)
+    this.legR.position.set(0.11, 0.66, 0)
     const gun = new THREE.Mesh(
       new THREE.BoxGeometry(0.07, 0.09, 0.5),
       new THREE.MeshLambertMaterial({ color: 0x22232a }),
@@ -54,8 +62,9 @@ export class RemotePlayer {
     gun.position.set(0.22, 1.12, -0.3)
     const tag = makeNameTag(name)
     tag.position.y = 1.95
-    this.group.add(body, head, legs, gun, tag)
+    this.group.add(body, head, this.legL, this.legR, gun, tag)
     scene.add(this.group)
+    this.lastPos.copy(this.group.position)
   }
 
   applyState(s: PlayerState) {
@@ -77,6 +86,20 @@ export class RemotePlayer {
     this.group.rotation.y += d * k
     this.crouchT += ((this.crouched && !this.down ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
     this.group.scale.y = 1 - this.crouchT * 0.28
+
+    // walk-cycle leg swing, driven by how fast this avatar is actually moving
+    const moveSpeed =
+      dt > 0.0001 ? Math.hypot(this.group.position.x - this.lastPos.x, this.group.position.z - this.lastPos.z) / dt : 0
+    this.lastPos.copy(this.group.position)
+    if (!this.down && moveSpeed > 0.3) {
+      this.walkT += dt * Math.min(moveSpeed, 6) * 1.4
+      const swing = Math.sin(this.walkT) * 0.5
+      this.legL.rotation.x = swing
+      this.legR.rotation.x = -swing
+    } else {
+      this.legL.rotation.x *= 0.8
+      this.legR.rotation.x *= 0.8
+    }
   }
 
   get pos(): THREE.Vector3 {
