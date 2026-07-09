@@ -53,6 +53,17 @@ body {
     env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+#title-screen #version-badge {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 14px);
+  top: calc(env(safe-area-inset-top) + 12px);
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: rgba(180, 255, 150, 0.55);
+  text-shadow: 0 0 4px rgba(90, 220, 90, 0.35);
+}
+
 .game-title {
   font-family: var(--font-display);
   font-size: clamp(3rem, 14vw, 8rem);
@@ -576,6 +587,18 @@ body {
   letter-spacing: 0.14em;
   color: var(--blood-bright);
   text-shadow: 0 0 8px rgba(224, 32, 32, 0.5);
+}
+
+#version-badge {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 18px);
+  top: calc(env(safe-area-inset-top) + 100px);
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: rgba(180, 255, 150, 0.55);
+  text-shadow: 0 0 4px rgba(90, 220, 90, 0.35);
+  pointer-events: none;
 }
 
 #wave-banner {
