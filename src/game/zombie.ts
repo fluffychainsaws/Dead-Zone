@@ -54,15 +54,17 @@ const JUGGERNAUT_CHARGE_COOLDOWN = 5.5
 // and instead grabs its target for a few seconds before throwing them — and can
 // also grab a nearby ordinary zombie and hurl it at you from range.
 export const ZUGGERNAUT_SCALE = 2.05 // taller than the Juggernaut's 1.7
-export const ZUGGERNAUT_EVOLVE_CHANCE = 0.9
+const ZUGGERNAUT_EVOLVE_START_WAVE = 20 // no resurrections at all before this
+const ZUGGERNAUT_EVOLVE_CHANCE_MIN = 0.02
+const ZUGGERNAUT_EVOLVE_CHANCE_MAX = 0.05
 export const ZUGGERNAUT_RESURRECT_TIME = 2.6 // lying in blood, then rising
 const ZUGGERNAUT_GRAB_RANGE = 1.6
 export const ZUGGERNAUT_GRAB_DURATION = 2.0
 export const ZUGGERNAUT_THROW_DAMAGE = 75 // 3/4 of a full-health player's HP
 export const ZUGGERNAUT_STUN_TIME = 1.0
-/** How far (10-15ft → 18-24ft) and where the grabbed player is held — matched by Game.ts. */
-export const ZUGGERNAUT_THROW_MIN_DIST = 5.5 // ~18ft
-export const ZUGGERNAUT_THROW_MAX_DIST = 7.3 // ~24ft
+/** How far (30-40ft) and where the grabbed player is held — matched by Game.ts. */
+export const ZUGGERNAUT_THROW_MIN_DIST = 9.1 // ~30ft
+export const ZUGGERNAUT_THROW_MAX_DIST = 12.2 // ~40ft
 export const ZUGGERNAUT_HEAD_HEIGHT = 1.34 * ZUGGERNAUT_SCALE // matches the head mesh's local y
 export const ZUGGERNAUT_HOLD_FORWARD_OFFSET = 0.6 // held out in front of its face, not inside its head
 const ZUGGERNAUT_GRAB_COOLDOWN = 7.0
@@ -85,6 +87,15 @@ export type ZuggernautPhase = 'ground' | 'grabbing' | 'throwingZombie'
  *  wave-scaled HP formula is duplicated here for the evolve-into-Zuggernaut case. */
 function zombieHpForWave(wave: number): number {
   return Math.round(60 * (1 + 0.17 * (wave - 1)))
+}
+
+/** No resurrections before wave 20, then a slow ramp from 2% up to a 5% cap. */
+function zuggernautEvolveChance(wave: number): number {
+  if (wave < ZUGGERNAUT_EVOLVE_START_WAVE) return 0
+  return Math.min(
+    ZUGGERNAUT_EVOLVE_CHANCE_MIN + (wave - ZUGGERNAUT_EVOLVE_START_WAVE) * 0.001,
+    ZUGGERNAUT_EVOLVE_CHANCE_MAX,
+  )
 }
 
 export interface TargetInfo {
@@ -253,7 +264,7 @@ export class Zombie {
     if (!this.alive) return false
     this.hp -= amount
     if (this.hp <= 0) {
-      if (this.isPlain && Math.random() < ZUGGERNAUT_EVOLVE_CHANCE) {
+      if (this.isPlain && Math.random() < zuggernautEvolveChance(this.spawnWave)) {
         this.state = 'resurrecting'
         this.deathT = 0
         this.justStartedResurrect = true

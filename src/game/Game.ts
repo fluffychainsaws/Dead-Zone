@@ -1057,6 +1057,9 @@ export class Game {
             ZUGGERNAUT_THROW_MIN_DIST + Math.random() * (ZUGGERNAUT_THROW_MAX_DIST - ZUGGERNAUT_THROW_MIN_DIST)
           this.player.throwTo(Math.sin(ry), Math.cos(ry), dist, this.arena.playerColliders)
         }
+        // the hold pins the player at head height — land them on the ground
+        // immediately rather than leaving them floating through the stun
+        this.player.pos.y = 0
         this.player.stunT = ZUGGERNAUT_STUN_TIME
         this.lastGrabZombie = null
         this.lastGrabClientZid = null
