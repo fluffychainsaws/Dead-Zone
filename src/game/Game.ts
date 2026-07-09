@@ -19,7 +19,13 @@ import {
 } from '../net/room'
 import { Lobby, shortName } from '../net/lobby'
 import type { TargetInfo, Zombie } from './zombie'
-import { ZUGGERNAUT_STUN_TIME } from './zombie'
+import {
+  ZUGGERNAUT_STUN_TIME,
+  ZUGGERNAUT_THROW_MIN_DIST,
+  ZUGGERNAUT_THROW_MAX_DIST,
+  ZUGGERNAUT_HEAD_HEIGHT,
+  ZUGGERNAUT_HOLD_FORWARD_OFFSET,
+} from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
 import { PauseMenu } from '../ui/pause'
@@ -1046,7 +1052,8 @@ export class Game {
               : null
             : (this.lastGrabZombie?.group.rotation.y ?? null)
         if (ry !== null) {
-          const dist = 3 + Math.random() * 1.6 // ~10-15ft
+          const dist =
+            ZUGGERNAUT_THROW_MIN_DIST + Math.random() * (ZUGGERNAUT_THROW_MAX_DIST - ZUGGERNAUT_THROW_MIN_DIST)
           this.player.throwTo(Math.sin(ry), Math.cos(ry), dist, this.arena.playerColliders)
         }
         this.player.stunT = ZUGGERNAUT_STUN_TIME
@@ -1077,7 +1084,8 @@ export class Game {
         if (this.input.consumeLightToggle()) this.cycleLight()
       }
       // pin a grabbed player's position to whatever's holding them, every frame,
-      // same idea as a latched midget pinning itself to its host
+      // same idea as a latched midget pinning itself to its host — held at head
+      // height, out in front of its face rather than inside its head
       if (isGrabbed) {
         const holderPos =
           this.netMode === 'client'
@@ -1085,7 +1093,21 @@ export class Game {
               ? this.remoteZombies.posOf(this.myGrabClientZid)
               : null
             : (this.myGrabZombie?.group.position ?? null)
-        if (holderPos) this.player.pos.set(holderPos.x, 1.6, holderPos.z)
+        const holderRy =
+          this.netMode === 'client'
+            ? this.myGrabClientZid !== null
+              ? this.remoteZombies.rotationOf(this.myGrabClientZid)
+              : null
+            : (this.myGrabZombie?.group.rotation.y ?? null)
+        if (holderPos && holderRy !== null) {
+          this.player.pos.set(
+            holderPos.x + Math.sin(holderRy) * ZUGGERNAUT_HOLD_FORWARD_OFFSET,
+            ZUGGERNAUT_HEAD_HEIGHT,
+            holderPos.z + Math.cos(holderRy) * ZUGGERNAUT_HOLD_FORWARD_OFFSET,
+          )
+        } else if (holderPos) {
+          this.player.pos.set(holderPos.x, ZUGGERNAUT_HEAD_HEIGHT, holderPos.z)
+        }
       }
       // the horde has mass — you can't wade through it (except a zombie latched onto or grabbing us)
       const bodies =

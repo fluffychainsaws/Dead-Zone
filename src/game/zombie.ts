@@ -60,6 +60,11 @@ const ZUGGERNAUT_GRAB_RANGE = 1.6
 export const ZUGGERNAUT_GRAB_DURATION = 2.0
 export const ZUGGERNAUT_THROW_DAMAGE = 75 // 3/4 of a full-health player's HP
 export const ZUGGERNAUT_STUN_TIME = 1.0
+/** How far (10-15ft → 18-24ft) and where the grabbed player is held — matched by Game.ts. */
+export const ZUGGERNAUT_THROW_MIN_DIST = 5.5 // ~18ft
+export const ZUGGERNAUT_THROW_MAX_DIST = 7.3 // ~24ft
+export const ZUGGERNAUT_HEAD_HEIGHT = 1.34 * ZUGGERNAUT_SCALE // matches the head mesh's local y
+export const ZUGGERNAUT_HOLD_FORWARD_OFFSET = 0.6 // held out in front of its face, not inside its head
 const ZUGGERNAUT_GRAB_COOLDOWN = 7.0
 const ZUGGERNAUT_ZOMBIE_GRAB_RADIUS = 2.2 // how close a fodder zombie must be to get grabbed
 const ZUGGERNAUT_ZOMBIE_THROW_MIN_RANGE = 4
@@ -68,6 +73,8 @@ const ZUGGERNAUT_ZOMBIE_THROW_DURATION = 0.6
 const ZUGGERNAUT_ZOMBIE_THROW_DAMAGE = 22
 const ZUGGERNAUT_ZOMBIE_THROW_CONTACT_RADIUS = 1.3
 const ZUGGERNAUT_ZOMBIE_THROW_COOLDOWN = 4.5
+const THROWN_PRONE_TIME = 1.6 // a thrown plain zombie lies here before rising
+const THROWN_RISE_TIME = 0.7
 
 export type ZombieState = 'chasing' | 'attacking' | 'dying' | 'resurrecting'
 export type MidgetPhase = 'ground' | 'jumping' | 'latched'
@@ -177,11 +184,15 @@ export class Zombie {
   private grabT = 0
   private throwCooldown = 1 + Math.random() * 2
   private throwT = 0
-  private throwStartX = 0
-  private throwStartZ = 0
-  private throwTargetX = 0
-  private throwTargetZ = 0
-  private thrownProjectile: THREE.Group | null = null
+
+  // "thrown" state — any plain zombie flung by a Zuggernaut lands prone, then
+  // slowly stands back up on its own; it isn't killed by the throw
+  private thrownPhase: 'none' | 'flying' | 'prone' | 'rising' = 'none'
+  private thrownT = 0
+  private thrownStartX = 0
+  private thrownStartZ = 0
+  private thrownTargetX = 0
+  private thrownTargetZ = 0
 
   constructor(
     scene: THREE.Scene,
@@ -326,6 +337,7 @@ export class Zombie {
       if (t >= 1) this.evolveIntoZuggernaut()
       return null
     }
+    if (this.thrownPhase !== 'none') return this.updateThrown(dt, targets)
 
     this.animT += dt * (this.runner || this.isZuggernaut ? 2.4 : 1.0)
     if (this.isZuggernaut) {
@@ -359,7 +371,7 @@ export class Zombie {
     }
     if (this.isZuggernaut) {
       if (this.zuggernautPhase === 'grabbing') return this.updateGrabbing(dt)
-      if (this.zuggernautPhase === 'throwingZombie') return this.updateThrowingZombie(dt, targets)
+      if (this.zuggernautPhase === 'throwingZombie') return this.updateThrowingZombie(dt)
     }
 
     if (!target) return null
@@ -646,57 +658,78 @@ export class Zombie {
     return targetId ? { targetId, damage: ZUGGERNAUT_THROW_DAMAGE } : null
   }
 
-  /** Instantly consumes a nearby plain zombie and hurls its own mesh at the target
-   *  in a locked-in arc — a ranged option when the player is out of grab range. */
+  /** Hurls a nearby plain zombie at the target in a locked-in arc — a ranged
+   *  option when the player is out of grab range. The fodder animates its own
+   *  flight (see becomeThrown/updateThrown); it lands prone, not dead. */
   private startThrowZombie(fodder: Zombie, target: TargetInfo) {
     this.zuggernautPhase = 'throwingZombie'
     this.throwT = 0
-    this.throwStartX = this.group.position.x
-    this.throwStartZ = this.group.position.z
-    this.throwTargetX = target.pos.x
-    this.throwTargetZ = target.pos.z
-    this.thrownProjectile = fodder.group
-    this.thrownProjectile.position.set(this.throwStartX, 1.2, this.throwStartZ)
-    fodder.hp = 0
-    fodder.state = 'dying' // excludes it from Horde.targets() — can't be shot mid-flight
-    fodder.dead = true // and Horde skips its own update() this frame — we now own the mesh
+    fodder.becomeThrown(this.group.position.x, this.group.position.z, target.pos.x, target.pos.z)
     this.state = 'attacking'
   }
 
-  private updateThrowingZombie(dt: number, targets: TargetInfo[]): AttackResult | null {
+  /** Brief throw-motion beat on the Zuggernaut's end — the fodder handles its own flight. */
+  private updateThrowingZombie(dt: number): AttackResult | null {
     this.throwT += dt
-    const t = Math.min(1, this.throwT / ZUGGERNAUT_ZOMBIE_THROW_DURATION)
-    if (this.thrownProjectile) {
-      const arc = Math.sin(Math.PI * t) * 1.6
-      this.thrownProjectile.position.set(
-        this.throwStartX + (this.throwTargetX - this.throwStartX) * t,
-        1.2 + arc,
-        this.throwStartZ + (this.throwTargetZ - this.throwStartZ) * t,
-      )
-      this.thrownProjectile.rotation.x += dt * 10
-    }
-    if (t < 1) return null
-
-    let result: AttackResult | null = null
-    if (this.thrownProjectile) {
-      for (const tt of targets) {
-        const d = Math.hypot(
-          tt.pos.x - this.thrownProjectile.position.x,
-          tt.pos.z - this.thrownProjectile.position.z,
-        )
-        if (d <= ZUGGERNAUT_ZOMBIE_THROW_CONTACT_RADIUS) {
-          result = { targetId: tt.id, damage: ZUGGERNAUT_ZOMBIE_THROW_DAMAGE }
-          break
-        }
-      }
-      this.scene.remove(this.thrownProjectile)
-      disposeZombieMesh(this.thrownProjectile)
-      this.thrownProjectile = null
-    }
+    if (this.throwT < 0.3) return null
     this.zuggernautPhase = 'ground'
     this.throwCooldown = ZUGGERNAUT_ZOMBIE_THROW_COOLDOWN
     this.state = 'chasing'
-    return result
+    return null
+  }
+
+  /** Launches this (plain) zombie into a thrown arc — called by the Zuggernaut
+   *  that grabbed it. It isn't killed: it flies, lands prone, then stands back up. */
+  becomeThrown(fromX: number, fromZ: number, toX: number, toZ: number) {
+    this.thrownPhase = 'flying'
+    this.thrownT = 0
+    this.thrownStartX = fromX
+    this.thrownStartZ = fromZ
+    this.thrownTargetX = toX
+    this.thrownTargetZ = toZ
+    this.group.position.set(fromX, 1.2, fromZ)
+  }
+
+  private updateThrown(dt: number, targets: TargetInfo[]): AttackResult | null {
+    this.thrownT += dt
+    if (this.thrownPhase === 'flying') {
+      const t = Math.min(1, this.thrownT / ZUGGERNAUT_ZOMBIE_THROW_DURATION)
+      const arc = Math.sin(Math.PI * t) * 1.6
+      this.group.position.set(
+        this.thrownStartX + (this.thrownTargetX - this.thrownStartX) * t,
+        1.2 + arc,
+        this.thrownStartZ + (this.thrownTargetZ - this.thrownStartZ) * t,
+      )
+      this.group.rotation.x += dt * 10
+      if (t < 1) return null
+      this.thrownPhase = 'prone'
+      this.thrownT = 0
+      this.group.position.y = 0
+      this.group.rotation.x = -Math.PI / 2
+      for (const tt of targets) {
+        const d = Math.hypot(tt.pos.x - this.group.position.x, tt.pos.z - this.group.position.z)
+        if (d <= ZUGGERNAUT_ZOMBIE_THROW_CONTACT_RADIUS) {
+          return { targetId: tt.id, damage: ZUGGERNAUT_ZOMBIE_THROW_DAMAGE }
+        }
+      }
+      return null
+    }
+    if (this.thrownPhase === 'prone') {
+      if (this.thrownT >= THROWN_PRONE_TIME) {
+        this.thrownPhase = 'rising'
+        this.thrownT = 0
+      }
+      return null
+    }
+    // rising
+    const t = Math.min(1, this.thrownT / THROWN_RISE_TIME)
+    this.group.rotation.x = -(Math.PI / 2) * (1 - t)
+    if (t >= 1) {
+      this.thrownPhase = 'none'
+      this.group.rotation.x = 0
+      this.state = 'chasing'
+    }
+    return null
   }
 
   /** Braced, roaring wind-up — telegraphs the charge direction long enough to dodge. */
