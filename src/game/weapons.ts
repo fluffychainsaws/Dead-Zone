@@ -413,7 +413,7 @@ export class WeaponSystem {
       // keep the gun easing back toward hip position throughout the reload —
       // otherwise a reload started mid-ADS freezes the gun up near the camera,
       // then snaps down to hip the instant the reload finishes
-      this.applyViewmodelMotion()
+      this.applyViewmodelMotion(input.isTouch)
       w.viewmodel.rotation.x = -0.7 * Math.sin((1 - this.reloadT / w.def.reloadTime) * Math.PI)
       if (this.reloadT <= 0) {
         this.reloading = false
@@ -450,13 +450,13 @@ export class WeaponSystem {
       ? (input.fireHeld || crosshairOnZombie) && !this.suppressAutoFire
       : input.consumeFirePress() || crosshairOnZombie
     if (!wantsFire || this.cooldown > 0) {
-      this.applyViewmodelMotion()
+      this.applyViewmodelMotion(input.isTouch)
       return []
     }
     if (w.mag <= 0) {
       if (w.reserve > 0) this.startReload()
       else this.events.dryFired = true
-      this.applyViewmodelMotion()
+      this.applyViewmodelMotion(input.isTouch)
       return []
     }
 
@@ -508,7 +508,7 @@ export class WeaponSystem {
       if (first) effects.impact(point.clone())
     }
 
-    this.applyViewmodelMotion()
+    this.applyViewmodelMotion(input.isTouch)
     return hits
   }
 
@@ -534,7 +534,7 @@ export class WeaponSystem {
     this.events.reloadStarted = true
   }
 
-  private applyViewmodelMotion() {
+  private applyViewmodelMotion(isTouch: boolean) {
     const vm = this.active.viewmodel
     // gun-bash melee: a quick forward-and-down thrust, independent of firing kick
     const meleeK = this.meleeT > 0 ? Math.sin((1 - this.meleeT / 0.25) * Math.PI) : 0
@@ -549,20 +549,23 @@ export class WeaponSystem {
     // crowded onto the right half of the screen
     const hipX = (vm.userData.hipX as number | undefined) ?? 0.28
     const hipY = -0.26
-    const hipZ = -0.55
+    // phone viewports read the gun as noticeably smaller/farther than desktop —
+    // pull it closer and scale it up a bit so it doesn't look tiny
+    const hipZ = isTouch ? -0.47 : -0.55
+    const touchScale = isTouch ? 1.15 : 1
     const fullAimScale = 1 - 0.14
     const sightX = (vm.userData.sightX as number | undefined) ?? 0
     const sightY = (vm.userData.sightY as number | undefined) ?? 0
     const aimX = -sightX * fullAimScale
     const aimY = -sightY * fullAimScale
-    const aimZ = -0.4
+    const aimZ = isTouch ? -0.32 : -0.4
     const k = this.aimK
     vm.position.set(
       hipX + (aimX - hipX) * k,
       hipY + (aimY - hipY) * k - this.kick * 0.01 - meleeK * 0.05,
       hipZ + (aimZ - hipZ) * k + this.kick * 0.06 - meleeK * 0.35,
     )
-    vm.scale.setScalar(1 - 0.14 * k)
+    vm.scale.setScalar((1 - 0.14 * k) * touchScale)
     vm.rotation.x = this.kick * 0.09 - meleeK * 0.5
 
     // support hand: reaches for a fresh mag mid-reload and seats it, then returns

@@ -149,6 +149,7 @@ export class Game {
     this.arena.playerColliders.push(this.clawCollider)
     this.arena.zombieColliders.push(this.clawCollider)
     this.hud = new Hud()
+    this.input.bindPromptTap()
     this.horde = new Horde(this.scene)
     this.remoteZombies = new RemoteZombieField(this.scene)
     this.waves = new WaveSystem(this.horde, () => this.arena.activeSpawns(), {

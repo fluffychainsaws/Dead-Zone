@@ -750,7 +750,7 @@ body {
   left: 50%;
   bottom: 26%;
   transform: translateX(-50%);
-  padding: 0.5rem 1.2rem;
+  padding: 0.7rem 1.4rem;
   font-family: var(--font-display);
   font-size: 1.1rem;
   letter-spacing: 0.12em;
@@ -760,10 +760,22 @@ body {
   border-radius: 4px;
   display: none;
   white-space: nowrap;
+  /* on touch this doubles as the actual tap target for buying/interacting —
+     harmless on desktop, which has no tap handler wired to it. #hud doesn't
+     establish its own stacking context, so this z-index competes directly
+     with #touch-controls (5) — without it the invisible look-zone sitting on
+     top would swallow the tap before it ever reaches this element. */
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 10;
 }
 
 #prompt.show {
   display: block;
+}
+
+#prompt:active {
+  background: rgba(224, 192, 32, 0.25);
 }
 
 #hitmarker {
@@ -1121,32 +1133,23 @@ body {
   border-color: rgba(108, 240, 255, 0.5);
 }
 
-/* center-screen contextual prompts — replace always-on buttons so the screen
-   isn't cluttered outside the moment they're actually usable */
-#btn-melee,
-#btn-interact {
+/* center-screen melee prompt — replaces an always-on button so the screen
+   isn't cluttered outside the moment it's actually usable */
+#btn-melee {
+  /* above #midget-overlay (z-index 23) — otherwise the latch creature's dark
+     body graphic renders over the button and dims its glow */
+  z-index: 25;
   left: 50%;
   top: 50%;
+  transform: translate(-50%, calc(-50% + 90px));
   width: 64px;
   height: 64px;
-  font-size: 1rem;
-  display: none;
-}
-
-#btn-melee {
-  transform: translate(-50%, calc(-50% + 90px));
   font-size: 1.4rem;
   border-color: rgba(224, 32, 32, 0.6);
   background: rgba(40, 8, 8, 0.5);
+  display: none;
 }
 
-#btn-interact {
-  transform: translate(-50%, calc(-50% + 170px));
-  border-color: rgba(132, 255, 90, 0.7);
-  background: rgba(10, 30, 8, 0.55);
-}
-
-#btn-melee.visible,
-#btn-interact.visible {
+#btn-melee.visible {
   display: block;
 }

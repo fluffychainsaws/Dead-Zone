@@ -144,7 +144,6 @@ export class Hud {
   setPrompt(text: string | null) {
     this.promptEl.textContent = text ?? ''
     this.promptEl.classList.toggle('show', !!text)
-    document.getElementById('btn-interact')?.classList.toggle('visible', !!text)
   }
 
   private reviveMarkers = new Map<string, HTMLElement>()

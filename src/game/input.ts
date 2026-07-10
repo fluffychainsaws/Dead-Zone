@@ -152,6 +152,17 @@ export class Input {
     document.getElementById('btn-melee')?.classList.toggle('visible', available)
   }
 
+  /** Makes the yellow "USE ..." prompt banner itself the tap target for buying/
+   *  interacting on mobile, instead of a separate button elsewhere on screen.
+   *  Called once the HUD (which owns #prompt) exists. */
+  bindPromptTap() {
+    if (!this.isTouch) return
+    document.getElementById('prompt')?.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      this.interactPresses++
+    })
+  }
+
   /** Is this key currently held? (desktop only — always false on touch). */
   isDown(code: string): boolean {
     return this.keys.has(code)
@@ -218,7 +229,6 @@ export class Input {
       <button id="btn-crouch">⤓</button>
       <button id="btn-melee">✊</button>
       <button id="btn-light">🔦</button>
-      <button id="btn-interact">USE</button>
     `
     document.getElementById('app')!.appendChild(root)
 
@@ -315,10 +325,6 @@ export class Input {
     lookZone.addEventListener('pointerup', lookEnd)
     lookZone.addEventListener('pointercancel', lookEnd)
 
-    root.querySelector('#btn-interact')!.addEventListener('pointerdown', (e) => {
-      e.preventDefault()
-      this.interactPresses++
-    })
     root.querySelector('#btn-swap')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.switchPresses++
