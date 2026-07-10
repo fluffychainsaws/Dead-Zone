@@ -209,8 +209,7 @@ export class Input {
     root.innerHTML = `
       <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
       <div id="look-zone"></div>
-      <button id="btn-fire">FIRE</button>
-      <button id="btn-aim">ADS</button>
+      <button id="btn-aim" aria-label="Aim down sights"></button>
       <button id="btn-reload">R</button>
       <button id="btn-swap">⇄</button>
       <button id="btn-jump">▲</button>
@@ -287,16 +286,6 @@ export class Input {
     }
     lookZone.addEventListener('pointerup', lookEnd)
     lookZone.addEventListener('pointercancel', lookEnd)
-
-    const fire = root.querySelector<HTMLElement>('#btn-fire')!
-    fire.addEventListener('pointerdown', (e) => {
-      e.preventDefault()
-      this.fireHeld = true
-      this.firePresses++
-    })
-    const fireEnd = () => (this.fireHeld = false)
-    fire.addEventListener('pointerup', fireEnd)
-    fire.addEventListener('pointercancel', fireEnd)
 
     const aim = root.querySelector<HTMLElement>('#btn-aim')!
     aim.addEventListener('pointerdown', (e) => {

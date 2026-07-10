@@ -51,7 +51,7 @@ export class Hud {
       <div id="ammo">--</div>
       <div id="hint">${
         isTouch
-          ? 'Left: move · Right: aim · Hold FIRE · ADS to zoom'
+          ? 'Left: move · Right: aim · Auto-fires on target · ADS to zoom'
           : 'WASD move · Shift sprint · Right-click ADS · Space jump/vault · Ctrl crouch · V melee · R reload'
       }</div>
       <div id="game-over">
