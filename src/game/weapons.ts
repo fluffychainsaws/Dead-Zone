@@ -833,6 +833,15 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.userData.muzzles = muzzles
     g.userData.sightX = 0 // aim between both pistols, not whichever one was tagged last
     g.userData.hipX = 0.05 // mostly centered — the pair already spans both sides on its own
+    // ADS raises the gun until (sightX, sightY) hits the crosshair, but neither
+    // pistol's own red dot sits at that centered x — without a marker there,
+    // aiming in shows two dots off to the sides and nothing in the middle
+    const centerDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.003, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.7 }),
+    )
+    centerDot.position.set(0, 0.075, -0.02)
+    g.add(centerDot)
   } else if (kind === 'chainsaw') {
     // Gas chainsaw: engine block + guide bar + chain, rear handle with trigger
     const chainMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 70 })
