@@ -1030,6 +1030,10 @@ body {
   z-index: 20;
 }
 
+#audio-toggles.hidden {
+  display: none;
+}
+
 #audio-toggles button {
   width: 42px;
   height: 42px;

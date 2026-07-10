@@ -16,6 +16,9 @@ const game = new Game(canvas)
 
 function hideTitle() {
   titleScreen.classList.add('hidden')
+  // on phones the music/SFX buttons are redundant once gameplay starts — the
+  // pause menu has its own mute + volume controls now
+  if (isTouchDevice) document.getElementById('audio-toggles')?.classList.add('hidden')
 }
 
 document.getElementById('play-btn')!.addEventListener('click', () => {
