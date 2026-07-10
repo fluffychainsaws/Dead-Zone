@@ -127,7 +127,7 @@ export class Hud {
     if (inLab) {
       if (mode === 'flashlight') text = '🔦 FLASHLIGHT · T'
       else if (mode === 'nvg') text = '🥽 NIGHT VISION · T'
-      else text = ownsFlash || ownsNvg ? '🌑 LIGHT OFF · T' : '🌑 PITCH BLACK'
+      else text = ownsFlash || ownsNvg ? '🌑 LIGHT OFF · T' : '🌑 NO LIGHT SOURCE'
     }
     if (text === this.lastLight) return
     this.lastLight = text
