@@ -1092,100 +1092,61 @@ body {
   z-index: 6;
 }
 
-/* Right-side action cluster: a clean 2-column grid, thumb-reachable from the
-   bottom-right corner, columns at 30px/104px from the edge, 68px row pitch. */
-
-#btn-aim {
-  right: calc(env(safe-area-inset-right) + 30px);
-  bottom: calc(env(safe-area-inset-bottom) + 40px);
-  width: 64px;
-  height: 64px;
-  border-color: rgba(224, 32, 32, 0.65);
-  background: rgba(40, 8, 8, 0.45);
-}
-
-#btn-aim:active {
-  background: rgba(120, 16, 16, 0.55);
-}
-
-#btn-aim::before {
-  /* red crosshair — this is the ADS button */
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: rgba(255, 60, 60, 0.95);
-  box-shadow:
-    0 -9px 0 -1px rgba(255, 60, 60, 0.85),
-    0 9px 0 -1px rgba(255, 60, 60, 0.85),
-    -9px 0 0 -1px rgba(255, 60, 60, 0.85),
-    9px 0 0 -1px rgba(255, 60, 60, 0.85);
-}
-
-#btn-jump {
-  right: calc(env(safe-area-inset-right) + 30px);
-  bottom: calc(env(safe-area-inset-bottom) + 112px);
-  width: 56px;
-  height: 56px;
-  font-size: 1.2rem;
-}
-
-#btn-crouch {
-  right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 116px);
-  width: 52px;
-  height: 52px;
-  font-size: 1.25rem;
-}
-
-/* only appears when a zombie is in melee range — replaces an always-on button
-   so the screen isn't cluttered the rest of the time */
-#btn-melee {
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, calc(-50% + 90px));
-  width: 64px;
-  height: 64px;
-  font-size: 1.4rem;
-  border-color: rgba(224, 32, 32, 0.6);
-  background: rgba(40, 8, 8, 0.5);
-  display: none;
-}
-
-#btn-melee.visible {
-  display: block;
-}
+/* Right-side action column: aim, jump, and interact are all gone from here now
+   (double-tap-to-aim, auto-vault, and a center-screen prompt respectively), so
+   what's left fits in a single thumb-reachable column. */
 
 #btn-swap {
-  right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 44px);
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 40px);
   width: 52px;
   height: 52px;
   font-size: 1.3rem;
 }
 
+#btn-crouch {
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 112px);
+  width: 52px;
+  height: 52px;
+  font-size: 1.25rem;
+}
+
 #btn-light {
-  right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 188px);
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 184px);
   width: 52px;
   height: 52px;
   font-size: 1.2rem;
   border-color: rgba(108, 240, 255, 0.5);
 }
 
+/* center-screen contextual prompts — replace always-on buttons so the screen
+   isn't cluttered outside the moment they're actually usable */
+#btn-melee,
 #btn-interact {
-  right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 256px);
-  width: 56px;
-  height: 56px;
-  font-size: 0.85rem;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  font-size: 1rem;
   display: none;
 }
 
+#btn-melee {
+  transform: translate(-50%, calc(-50% + 90px));
+  font-size: 1.4rem;
+  border-color: rgba(224, 32, 32, 0.6);
+  background: rgba(40, 8, 8, 0.5);
+}
+
+#btn-interact {
+  transform: translate(-50%, calc(-50% + 170px));
+  border-color: rgba(132, 255, 90, 0.7);
+  background: rgba(10, 30, 8, 0.55);
+}
+
+#btn-melee.visible,
 #btn-interact.visible {
   display: block;
 }

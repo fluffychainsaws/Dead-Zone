@@ -1154,6 +1154,7 @@ export class Game {
       if (!this.paused && isLatched) {
         // both hands are busy prying it off — no shooting, no shopping, melee = pry
         this.hud.setPrompt(null)
+        if (this.input.isTouch) this.input.setMeleeAvailable(true)
         if (this.input.consumeMelee()) {
           audio.melee()
           if (this.netMode === 'client') {

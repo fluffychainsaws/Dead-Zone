@@ -149,8 +149,10 @@ document.getElementById('help-btn')!.addEventListener('click', () => {
     ? `<li><b>LEFT SIDE</b> — drag to move (push far to sprint)</li>
        <li><b>RIGHT SIDE</b> — drag to aim</li>
        <li><b>AUTO-FIRE</b> — shoots automatically once the reticle is on a zombie</li>
-       <li><b>DOUBLE-TAP RIGHT SIDE</b> — reload (also reloads automatically when empty)</li>
-       <li><b>⇄</b> — swap weapon &nbsp;·&nbsp; <b>USE</b> — buy / revive</li>`
+       <li><b>DOUBLE-TAP LEFT SIDE</b> — toggle ADS &nbsp;·&nbsp; <b>DOUBLE-TAP RIGHT SIDE</b> — reload (also automatic when empty)</li>
+       <li>Walking into low obstacles vaults automatically</li>
+       <li>Melee and buy/revive prompts appear center-screen when in range</li>
+       <li><b>⇄</b> — swap weapon</li>`
     : `<li><b>WASD</b> — move &nbsp;·&nbsp; <b>SHIFT</b> — sprint</li>
        <li><b>MOUSE</b> — aim &nbsp;·&nbsp; <b>CLICK</b> — fire</li>
        <li><b>R</b> — reload &nbsp;·&nbsp; <b>Q</b> — swap weapon</li>

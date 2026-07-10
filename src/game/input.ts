@@ -214,9 +214,7 @@ export class Input {
     root.innerHTML = `
       <div id="joy-zone"></div>
       <div id="look-zone"></div>
-      <button id="btn-aim" aria-label="Aim down sights"></button>
       <button id="btn-swap">⇄</button>
-      <button id="btn-jump">▲</button>
       <button id="btn-crouch">⤓</button>
       <button id="btn-melee">✊</button>
       <button id="btn-light">🔦</button>
@@ -231,6 +229,11 @@ export class Input {
     let joyCX = 0
     let joyCY = 0
     const RADIUS = 52
+    let lastMoveTapTime = 0
+    let lastMoveTapX = 0
+    let lastMoveTapY = 0
+    const DOUBLE_TAP_MS = 320
+    const DOUBLE_TAP_RADIUS = 40
 
     // no visible stick — just touch anywhere on the left half and drag; the
     // touch-down point becomes the invisible center
@@ -240,6 +243,18 @@ export class Input {
       joyZone.setPointerCapture(e.pointerId)
       joyCX = e.clientX
       joyCY = e.clientY
+
+      // double-tap the left side to toggle ADS on/off (no dedicated aim button)
+      const now = performance.now()
+      const dist = Math.hypot(e.clientX - lastMoveTapX, e.clientY - lastMoveTapY)
+      if (now - lastMoveTapTime < DOUBLE_TAP_MS && dist < DOUBLE_TAP_RADIUS) {
+        this.aimHeld = !this.aimHeld
+        lastMoveTapTime = 0
+      } else {
+        lastMoveTapTime = now
+        lastMoveTapX = e.clientX
+        lastMoveTapY = e.clientY
+      }
     })
     joyZone.addEventListener('pointermove', (e) => {
       if (e.pointerId !== joyId) return
@@ -268,8 +283,6 @@ export class Input {
     let lastTapTime = 0
     let lastTapX = 0
     let lastTapY = 0
-    const DOUBLE_TAP_MS = 320
-    const DOUBLE_TAP_RADIUS = 40
     lookZone.addEventListener('pointerdown', (e) => {
       if (lookId !== -1) return
       lookId = e.pointerId
@@ -302,15 +315,6 @@ export class Input {
     lookZone.addEventListener('pointerup', lookEnd)
     lookZone.addEventListener('pointercancel', lookEnd)
 
-    const aim = root.querySelector<HTMLElement>('#btn-aim')!
-    aim.addEventListener('pointerdown', (e) => {
-      e.preventDefault()
-      this.aimHeld = true
-    })
-    const aimEnd = () => (this.aimHeld = false)
-    aim.addEventListener('pointerup', aimEnd)
-    aim.addEventListener('pointercancel', aimEnd)
-
     root.querySelector('#btn-interact')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.interactPresses++
@@ -318,10 +322,6 @@ export class Input {
     root.querySelector('#btn-swap')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.switchPresses++
-    })
-    root.querySelector('#btn-jump')!.addEventListener('pointerdown', (e) => {
-      e.preventDefault()
-      this.jumpPresses++
     })
     root.querySelector('#btn-crouch')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
