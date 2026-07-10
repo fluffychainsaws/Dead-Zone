@@ -81,6 +81,13 @@ export class Input {
     return false
   }
 
+  /** Drops any interact press nothing responded to this frame — E is a snapshot
+   *  of what's in range right now, not a buffered press that fires on whatever
+   *  you happen to walk up to next. */
+  clearInteract() {
+    this.interactPresses = 0
+  }
+
   consumeSwitch(): boolean {
     if (this.switchPresses > 0) {
       this.switchPresses--

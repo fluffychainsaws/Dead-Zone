@@ -491,6 +491,30 @@ export class WeaponSystem {
   }
 }
 
+/** An open-frame reflex sight — front/rear posts bridged by a top rail, with a
+ *  glowing dot floating in the window. Used on every gun in place of iron sights. */
+function addRedDot(g: THREE.Group, dark: THREE.Material, x: number, y: number, z: number) {
+  const riser = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.025, 0.045), dark)
+  riser.position.set(x, y - 0.025, z)
+  g.add(riser)
+  const uprightGeo = new THREE.BoxGeometry(0.022, 0.032, 0.012)
+  const front = new THREE.Mesh(uprightGeo, dark)
+  front.position.set(x, y, z - 0.028)
+  g.add(front)
+  const back = new THREE.Mesh(uprightGeo.clone(), dark)
+  back.position.set(x, y, z + 0.028)
+  g.add(back)
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.008, 0.07), dark)
+  top.position.set(x, y + 0.018, z)
+  g.add(top)
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.006, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff2020 }),
+  )
+  dot.position.set(x, y, z)
+  g.add(dot)
+}
+
 export function buildViewmodel(defId: string): THREE.Group {
   const g = new THREE.Group()
   const dark = new THREE.MeshPhongMaterial({ color: 0x2b2b30, shininess: 45 })
@@ -506,9 +530,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.04, -0.46)
     g.add(barrel)
-    const foresight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.02), dark)
-    foresight.position.set(0, 0.11, -0.68)
-    g.add(foresight)
+    addRedDot(g, dark, 0, 0.11, -0.32)
     const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.32, 8), drab)
     handguard.rotation.x = Math.PI / 2
     handguard.position.set(0, 0.02, -0.28)
@@ -535,6 +557,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.add(barrel)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.28), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.1, -0.1)
     const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), dark)
     drum.rotation.x = Math.PI / 2
     drum.position.set(0, -0.13, -0.06)
@@ -555,11 +578,9 @@ export function buildViewmodel(defId: string): THREE.Group {
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.03, -0.36)
     g.add(barrel)
-    const foresight = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.07, 0.018), dark)
-    foresight.position.set(0, 0.09, -0.55)
-    g.add(foresight)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.1, 0.34), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.1, -0.16)
     // curved magazine: two angled segments approximate the banana curve
     const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.14, 0.055), dark)
     magUpper.position.set(0, -0.1, -0.05)
@@ -581,26 +602,13 @@ export function buildViewmodel(defId: string): THREE.Group {
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.03, -0.4)
     g.add(barrel)
-    const foresight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.02), dark)
-    foresight.position.set(0, 0.09, -0.58)
-    g.add(foresight)
     const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.06, 0.28), drab)
     handguard.position.set(0, 0.01, -0.32)
     g.add(handguard)
     const upper = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.075, 0.32), dark)
     upper.position.set(0, 0.03, -0.06)
     g.add(upper)
-    // red dot: base + a small glowing lens
-    const dotBase = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.05), dark)
-    dotBase.position.set(0, 0.095, -0.12)
-    g.add(dotBase)
-    const dotLens = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.025, 10),
-      new THREE.MeshBasicMaterial({ color: 0xff2020 }),
-    )
-    dotLens.rotation.z = Math.PI / 2
-    dotLens.position.set(0, 0.1, -0.12)
-    g.add(dotLens)
+    addRedDot(g, dark, 0, 0.1, -0.12)
     const mag = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.24, 0.08), drab)
     mag.position.set(0, -0.16, -0.02)
     mag.rotation.x = 0.1
@@ -617,17 +625,14 @@ export function buildViewmodel(defId: string): THREE.Group {
     stockPad.position.set(0, 0.02, 0.33)
     g.add(stockPad)
   } else if (kind === 'mp5') {
-    // MP5: slim profile, curved mag, rotary rear sight, retractable stock
+    // MP5: slim profile, curved mag, red dot, retractable stock
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.28, 8), dark)
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.025, -0.28)
     g.add(barrel)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.32), dark)
     g.add(body)
-    const rearSight = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.03, 10), dark)
-    rearSight.rotation.x = Math.PI / 2
-    rearSight.position.set(0, 0.075, 0.02)
-    g.add(rearSight)
+    addRedDot(g, dark, 0, 0.08, -0.06)
     const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.06), dark)
     mag.position.set(0, -0.14, -0.04)
     mag.rotation.x = 0.16
@@ -693,6 +698,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     const sightRail = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.02, 0.3), dark)
     sightRail.position.set(0, 0.11, -0.03)
     g.add(sightRail)
+    addRedDot(g, dark, 0, 0.14, -0.03)
     const p90Grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.05), grip)
     p90Grip.position.set(0, -0.09, 0.08)
     p90Grip.rotation.x = 0.35
@@ -713,6 +719,7 @@ export function buildViewmodel(defId: string): THREE.Group {
       handle.position.set(side * 0.13, -0.11, 0.05)
       handle.rotation.x = 0.25
       g.add(handle)
+      addRedDot(g, dark, side * 0.13, 0.075, -0.02)
     }
   } else if (kind === 'chainsaw') {
     // Gas chainsaw: engine block + guide bar + chain, rear handle with trigger
@@ -782,6 +789,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.add(jacket)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.4), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.1, -0.08)
     const beltBox = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.18), grip)
     beltBox.position.set(0, -0.14, -0.02)
     g.add(beltBox)
@@ -809,6 +817,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.5), wood)
     stock.position.set(0, -0.02, 0.02)
     g.add(stock)
+    addRedDot(g, dark, 0, 0.08, -0.15)
     const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.18), wood)
     butt.position.set(0, -0.05, 0.3)
     g.add(butt)
@@ -824,6 +833,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.3), dark)
     body.position.set(0, 0, 0)
     g.add(body)
+    addRedDot(g, dark, 0, 0.075, -0.08)
     const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.11, 0.2), wood)
     butt.position.set(0, -0.04, 0.24)
     g.add(butt)
@@ -833,6 +843,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.add(barrel)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.32), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.08, -0.06)
     const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.22, 0.07), dark)
     magazine.position.set(0, -0.15, -0.05)
     magazine.rotation.x = 0.12
@@ -849,6 +860,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     cylinder.rotation.y = Math.PI / 2
     cylinder.position.set(0, 0, 0.0)
     g.add(cylinder)
+    addRedDot(g, dark, 0, 0.07, -0.06)
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), wood)
     handle.position.set(0, -0.1, 0.07)
     handle.rotation.x = 0.3
@@ -859,6 +871,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.add(barrel)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.34), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.08, -0.1)
     const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.08), dark)
     magazine.position.set(0, -0.14, -0.08)
     g.add(magazine)
@@ -877,6 +890,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.add(drum)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.1, 0.32), dark)
     g.add(body)
+    addRedDot(g, dark, 0, 0.08, -0.08)
     const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.11, 0.18), wood)
     butt.position.set(0, -0.03, 0.24)
     g.add(butt)
@@ -888,6 +902,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.16), dark)
     body.position.set(0, -0.03, -0.02)
     g.add(body)
+    addRedDot(g, dark, 0, 0.065, -0.02)
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.06), grip)
     handle.position.set(0, -0.11, 0.03)
     handle.rotation.x = 0.25

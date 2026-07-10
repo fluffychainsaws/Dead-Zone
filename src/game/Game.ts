@@ -1204,6 +1204,9 @@ export class Game {
           if (!this.player.downed) this.handleShopping()
           else this.hud.setPrompt(null)
         }
+        // an E press that hit nothing this frame is spent, not saved for whatever
+        // you happen to walk up to next
+        this.input.clearInteract()
       } else {
         this.hud.setPrompt(null)
       }
