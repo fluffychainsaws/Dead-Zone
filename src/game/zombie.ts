@@ -16,7 +16,12 @@ const RADIUS = 0.38
 const ATTACK_RANGE = 1.45
 const ATTACK_WINDUP = 0.45
 const ATTACK_COOLDOWN = 1.0
-const ATTACK_DAMAGE = 14
+const ATTACK_DAMAGE = 14 // midgets (and the rare zuggernaut fallback attack) — unchanged
+// Plain zombies: damage ramps from ATTACK_DAMAGE up each wave, reaching a flat
+// two-hit kill (50 dmg) by wave 15 and staying there.
+const PLAIN_ATTACK_DAMAGE_START = 14
+const PLAIN_ATTACK_DAMAGE_CAP_WAVE = 15
+const PLAIN_ATTACK_DAMAGE_CAP = 50
 
 // Midget Zombie: tiny, fragile, always dies to a headshot — but leaps from
 // medium range with a predicted (not tracking) trajectory and latches onto
@@ -47,6 +52,8 @@ const JUGGERNAUT_CHARGE_MAX_TIME = 2.2 // charge gives up if it hasn't hit anyth
 const JUGGERNAUT_CHARGE_DAMAGE = 60
 const JUGGERNAUT_CHARGE_CONTACT_RADIUS = 1.1
 const JUGGERNAUT_CHARGE_COOLDOWN = 5.5
+const JUGGERNAUT_CHARGE_INSTAKILL_WAVE = 30 // charge contact is a guaranteed kill from here on
+const JUGGERNAUT_CHARGE_INSTAKILL_DAMAGE = 9999
 
 // Zuggernaut Zombie: a normal zombie has a chance to rise back up as one of these
 // after it dies — a roar, a burst of blood, and it slowly stands up transformed.
@@ -87,6 +94,14 @@ export type ZuggernautPhase = 'ground' | 'grabbing' | 'throwingZombie'
  *  wave-scaled HP formula is duplicated here for the evolve-into-Zuggernaut case. */
 function zombieHpForWave(wave: number): number {
   return Math.round(60 * (1 + 0.17 * (wave - 1)))
+}
+
+/** Ramps a plain zombie's basic-attack damage up linearly from wave 1, reaching
+ *  a flat two-hit kill (50) at wave 15 and staying there beyond it. */
+function plainZombieAttackDamage(wave: number): number {
+  if (wave >= PLAIN_ATTACK_DAMAGE_CAP_WAVE) return PLAIN_ATTACK_DAMAGE_CAP
+  const step = (PLAIN_ATTACK_DAMAGE_CAP - PLAIN_ATTACK_DAMAGE_START) / (PLAIN_ATTACK_DAMAGE_CAP_WAVE - 1)
+  return Math.round(PLAIN_ATTACK_DAMAGE_START + (wave - 1) * step)
 }
 
 /** No resurrections before wave 20, then a slow ramp from 2% up to a 5% cap. */
@@ -461,7 +476,13 @@ export class Zombie {
       this.state = 'attacking'
       this.attackT += dt
       if (this.attackT >= ATTACK_WINDUP && this.attackT - dt < ATTACK_WINDUP) {
-        if (dist < ATTACK_RANGE + 0.4) dealt = this.isJuggernaut ? JUGGERNAUT_ATTACK_DAMAGE : ATTACK_DAMAGE
+        if (dist < ATTACK_RANGE + 0.4) {
+          dealt = this.isJuggernaut
+            ? JUGGERNAUT_ATTACK_DAMAGE
+            : this.isPlain
+              ? plainZombieAttackDamage(this.spawnWave)
+              : ATTACK_DAMAGE
+        }
       }
       if (this.attackT >= ATTACK_COOLDOWN) {
         this.attackT = 0
@@ -778,13 +799,15 @@ export class Zombie {
     const hitWall = pos.x !== preX || pos.z !== preZ
     this.group.rotation.z = Math.sin(this.chargeT * 30) * 0.05 // juddering charge shake
 
+    const chargeDamage =
+      this.spawnWave >= JUGGERNAUT_CHARGE_INSTAKILL_WAVE ? JUGGERNAUT_CHARGE_INSTAKILL_DAMAGE : JUGGERNAUT_CHARGE_DAMAGE
     let result: AttackResult | null = null
     for (const t of targets) {
       if (this.chargeHitIds.has(t.id)) continue
       const d = Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z)
       if (d <= JUGGERNAUT_CHARGE_CONTACT_RADIUS) {
         this.chargeHitIds.add(t.id)
-        if (!result) result = { targetId: t.id, damage: JUGGERNAUT_CHARGE_DAMAGE }
+        if (!result) result = { targetId: t.id, damage: chargeDamage }
       }
     }
 

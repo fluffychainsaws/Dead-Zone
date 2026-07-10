@@ -192,7 +192,7 @@ export const BOX_WEAPONS: WeaponDef[] = [
   box('barrett50', 'BARRETT .50 CAL', 'sniper50', { damage: 350, headshotMult: 4.5, rpm: 35, magSize: 5, maxReserve: 35, reloadTime: 3.0, spread: 0.001, auto: false, pellets: 1 }, { zoom: 0.28, scope: true }),
   box('p90', 'P90', 'p90', { damage: 27, headshotMult: 2.2, rpm: 900, magSize: 50, maxReserve: 300, reloadTime: 2.0, spread: 0.024, auto: true, pellets: 1 }, { zoom: 0.88 }),
   box('m249saw', 'M249 SAW', 'saw', { damage: 38, headshotMult: 2.3, rpm: 680, magSize: 150, maxReserve: 450, reloadTime: 4.0, spread: 0.03, auto: true, pellets: 1 }, { zoom: 0.92 }),
-  box('akimbo', 'AKIMBO 1911S', 'dualpistols', { damage: 30, headshotMult: 2.3, rpm: 500, magSize: 32, maxReserve: 192, reloadTime: 1.6, spread: 0.028, auto: true, pellets: 2 }, { zoom: 0.95 }),
+  box('akimbo', 'AKIMBO 1911S', 'dualpistols', { damage: 30, headshotMult: 2.3, rpm: 500, magSize: 32, maxReserve: 192, reloadTime: 1.6, spread: 0.028, auto: false, pellets: 2 }, { zoom: 0.95 }),
   box('chainsaw', 'CHAINSAW', 'chainsaw', { damage: 9, headshotMult: 1.4, rpm: 1200, magSize: 999, maxReserve: 999, reloadTime: 0.1, spread: 0.05, auto: true, pellets: 1 }),
   box('flamethrower', 'FLAMETHROWER', 'flamethrower', { damage: 6, headshotMult: 1.2, rpm: 1800, magSize: 120, maxReserve: 360, reloadTime: 3.5, spread: 0.05, auto: true, pellets: 3 }),
 ]
@@ -442,12 +442,21 @@ export class WeaponSystem {
     this.cooldown = 60 / w.def.rpm
     this.kick = 1
 
-    const hits: ShotHit[] = []
-    const muzzle = new THREE.Vector3()
-    w.viewmodel.children[0].getWorldPosition(muzzle)
-    this.lastMuzzle.copy(muzzle)
-    effects.muzzleFlash(muzzle)
+    // multi-barrel weapons (akimbo) tag their own muzzle anchors so each pellet
+    // visibly comes from a different gun; everything else has just the one
+    const muzzleAnchors = (w.viewmodel.userData.muzzles as THREE.Object3D[] | undefined) ?? [
+      w.viewmodel.children[0],
+    ]
+    const primaryMuzzle = new THREE.Vector3()
+    muzzleAnchors[0].getWorldPosition(primaryMuzzle)
+    this.lastMuzzle.copy(primaryMuzzle)
+    for (const anchor of muzzleAnchors) {
+      const p = new THREE.Vector3()
+      anchor.getWorldPosition(p)
+      effects.muzzleFlash(p)
+    }
 
+    const hits: ShotHit[] = []
     const spread = this.aiming ? w.def.spread * 0.15 : w.def.spread
     for (let p = 0; p < w.def.pellets; p++) {
       const dir = new THREE.Vector3()
@@ -469,7 +478,9 @@ export class WeaponSystem {
         object: first ? first.object : null,
         distance: first ? first.distance : Infinity,
       })
-      effects.tracer(muzzle.clone(), point.clone())
+      const muzzle = new THREE.Vector3()
+      muzzleAnchors[p % muzzleAnchors.length].getWorldPosition(muzzle)
+      effects.tracer(muzzle, point.clone())
       if (first) effects.impact(point.clone())
     }
 
@@ -725,20 +736,28 @@ export function buildViewmodel(defId: string): THREE.Group {
     trigger.position.set(0, -0.04, 0.1)
     g.add(trigger)
   } else if (kind === 'dualpistols') {
-    // Akimbo: two mirrored pistols side by side
+    // Akimbo: two mirrored pistols, evenly spaced either side of center, each
+    // with its own muzzle anchor so shots visibly alternate between them
+    const spacing = 0.19
+    const muzzles: THREE.Object3D[] = []
     for (const side of [-1, 1]) {
       const slide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.065, 0.28), dark)
-      slide.position.set(side * 0.13, 0.01, -0.12)
+      slide.position.set(side * spacing, 0.01, -0.12)
       g.add(slide)
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.075, 0.14), dark)
-      body.position.set(side * 0.13, -0.03, 0)
+      body.position.set(side * spacing, -0.03, 0)
       g.add(body)
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.055), grip)
-      handle.position.set(side * 0.13, -0.11, 0.05)
+      handle.position.set(side * spacing, -0.11, 0.05)
       handle.rotation.x = 0.25
       g.add(handle)
-      addRedDot(g, dark, side * 0.13, 0.075, -0.02)
+      addRedDot(g, dark, side * spacing, 0.075, -0.02)
+      const muzzle = new THREE.Object3D()
+      muzzle.position.set(side * spacing, 0.01, -0.26) // barrel tip
+      g.add(muzzle)
+      muzzles.push(muzzle)
     }
+    g.userData.muzzles = muzzles
   } else if (kind === 'chainsaw') {
     // Gas chainsaw: engine block + guide bar + chain, rear handle with trigger
     const chainMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 70 })
