@@ -498,15 +498,20 @@ export class WeaponSystem {
     const vm = this.active.viewmodel
     // gun-bash melee: a quick forward-and-down thrust, independent of firing kick
     const meleeK = this.meleeT > 0 ? Math.sin((1 - this.meleeT / 0.25) * Math.PI) : 0
-    // ADS: raise the sights toward center screen. Kept close to the hip depth (rather
-    // than pulled in tight to the camera) and slightly scaled down so the gun's body
-    // doesn't balloon up and block the view — only the sight itself should sit on the
-    // crosshair. Scoped weapons go further and hide behind the scope overlay instead.
+    // ADS: raise the gun until the red dot itself sits on the crosshair — not just
+    // "close to center." The dot's local mount point (tagged by addRedDot) is offset
+    // by the scale-down applied at full aim, so the target position cancels it out
+    // exactly at k=1. Kept close to hip depth (not pulled tight to the camera) so the
+    // gun's body doesn't balloon up and block the view. Scoped weapons go further and
+    // hide behind the scope overlay instead — their untagged sight offset is just 0.
     const hipX = 0.28
     const hipY = -0.26
     const hipZ = -0.55
-    const aimX = 0
-    const aimY = -0.15
+    const fullAimScale = 1 - 0.14
+    const sightX = (vm.userData.sightX as number | undefined) ?? 0
+    const sightY = (vm.userData.sightY as number | undefined) ?? 0
+    const aimX = -sightX * fullAimScale
+    const aimY = -sightY * fullAimScale
     const aimZ = -0.5
     const k = this.aimK
     vm.position.set(
@@ -542,6 +547,10 @@ function addRedDot(g: THREE.Group, dark: THREE.Material, x: number, y: number, z
   )
   dot.position.set(x, y, z)
   g.add(dot)
+  // tag where the sight actually sits so ADS can raise the gun until this exact
+  // point lines up with the crosshair, instead of an approximate fixed offset
+  g.userData.sightX = x
+  g.userData.sightY = y
 }
 
 export function buildViewmodel(defId: string): THREE.Group {
@@ -758,6 +767,7 @@ export function buildViewmodel(defId: string): THREE.Group {
       muzzles.push(muzzle)
     }
     g.userData.muzzles = muzzles
+    g.userData.sightX = 0 // aim between both pistols, not whichever one was tagged last
   } else if (kind === 'chainsaw') {
     // Gas chainsaw: engine block + guide bar + chain, rear handle with trigger
     const chainMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 70 })
