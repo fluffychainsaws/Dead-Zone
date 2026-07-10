@@ -3,18 +3,21 @@
 interface AudioSettings {
   music: boolean
   sfx: boolean
+  musicVolume: number // 0..1
+  sfxVolume: number // 0..1
 }
 
 const STORAGE_KEY = 'dz.audio'
+const DEFAULT_SETTINGS: AudioSettings = { music: true, sfx: true, musicVolume: 1, sfxVolume: 1 }
 
 function loadSettings(): AudioSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { music: true, sfx: true, ...JSON.parse(raw) }
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
   } catch {
     /* corrupted or unavailable storage — fall back to defaults */
   }
-  return { music: true, sfx: true }
+  return { ...DEFAULT_SETTINGS }
 }
 
 export class AudioEngine {
@@ -63,6 +66,16 @@ export class AudioEngine {
     return this.settings.sfx
   }
 
+  setMusicVolume(v: number) {
+    this.settings.musicVolume = Math.min(1, Math.max(0, v))
+    this.persist()
+  }
+
+  setSfxVolume(v: number) {
+    this.settings.sfxVolume = Math.min(1, Math.max(0, v))
+    this.persist()
+  }
+
   private persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings))
@@ -74,8 +87,8 @@ export class AudioEngine {
 
   private applySettings() {
     if (!this.ctx) return
-    this.musicBus.gain.value = this.settings.music ? 0.42 : 0
-    this.sfxBus.gain.value = this.settings.sfx ? 0.9 : 0
+    this.musicBus.gain.value = this.settings.music ? 0.42 * this.settings.musicVolume : 0
+    this.sfxBus.gain.value = this.settings.sfx ? 0.9 * this.settings.sfxVolume : 0
   }
 
   // ------------------------------ music ------------------------------

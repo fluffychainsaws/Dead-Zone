@@ -983,6 +983,42 @@ body {
   text-shadow: 0 0 10px rgba(224, 32, 32, 0.5);
 }
 
+#pause-audio {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid rgba(132, 255, 90, 0.2);
+  border-bottom: 1px solid rgba(132, 255, 90, 0.2);
+}
+
+.pause-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+#pause-box .pause-audio-toggle {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+#pause-box .pause-audio-toggle.off {
+  color: #4a5546;
+  border-color: rgba(120, 130, 115, 0.4);
+  text-decoration: line-through;
+}
+
+.pause-audio-row input[type='range'] {
+  flex: 1 1 auto;
+  height: 28px; /* generous touch target on mobile */
+  accent-color: rgb(132, 255, 90);
+  cursor: pointer;
+}
+
 /* ---------------- audio toggles ---------------- */
 
 #audio-toggles {
