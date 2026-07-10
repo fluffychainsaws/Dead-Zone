@@ -118,7 +118,7 @@ export class AudioEngine {
     drone(55, 'sawtooth', 0.16) // A1
     drone(55.6, 'sawtooth', 0.11) // detuned — slow beating dread
     drone(27.5, 'sine', 0.22) // sub
-    drone(82.41, 'triangle', 0.06) // E2, hollow fifth
+    drone(77.78, 'triangle', 0.07) // D#2 — a tritone against the root, not a "safe" fifth
 
     // breathing filter sweep
     const lfo = ctx.createOscillator()
@@ -162,7 +162,7 @@ export class AudioEngine {
     windFilter.frequency.value = 300
     windFilter.Q.value = 0.7
     const windGain = ctx.createGain()
-    windGain.gain.value = 0.028
+    windGain.gain.value = 0.055
     const windLfo = ctx.createOscillator()
     windLfo.frequency.value = 0.037
     const windLfoGain = ctx.createGain()
@@ -175,8 +175,14 @@ export class AudioEngine {
     windSrc.start()
     windLfo.start()
 
+    // hear the horror right away instead of waiting through a long random
+    // first delay — the recurring schedule kicks in after that
+    setTimeout(() => this.playMotif(), 1800)
+    setTimeout(() => this.playMusicBox(), 4500)
+    setTimeout(() => this.playBellToll(), 9000)
     this.scheduleMotif()
     this.scheduleMusicBox()
+    this.scheduleBellToll()
   }
 
   setIntensity(level: number) {
@@ -307,6 +313,49 @@ export class AudioEngine {
         o.start(t)
         o.stop(t + 1.2)
       }
+    }
+  }
+
+  private scheduleBellToll() {
+    const delay = 22000 + Math.random() * 20000
+    setTimeout(() => {
+      this.playBellToll()
+      this.scheduleBellToll()
+    }, delay)
+  }
+
+  /** A single distant, decaying bell strike — the unmistakable "something is
+   *  watching" horror-movie cue. Loud enough to notice, rare enough to land. */
+  private playBellToll() {
+    if (!this.ctx || !this.settings.music) return
+    const ctx = this.ctx
+    const t = ctx.currentTime
+    const fundamental = 196 // G3 — low, mournful
+    const out = ctx.createGain()
+    out.gain.value = 0.16
+    const bellFilter = ctx.createBiquadFilter()
+    bellFilter.type = 'lowpass'
+    bellFilter.frequency.value = 1400
+    out.connect(bellFilter)
+    bellFilter.connect(this.musicBus)
+    // inharmonic partials — what makes a struck metal bell sound like a bell
+    // instead of a musical note
+    for (const [mult, gain] of [
+      [1, 1],
+      [1.5, 0.55],
+      [2.4, 0.35],
+      [3.8, 0.18],
+    ] as const) {
+      const o = ctx.createOscillator()
+      o.type = 'sine'
+      o.frequency.value = fundamental * mult
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(gain, t)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5)
+      o.connect(g)
+      g.connect(out)
+      o.start(t)
+      o.stop(t + 4.6)
     }
   }
 
