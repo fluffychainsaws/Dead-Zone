@@ -929,6 +929,9 @@ export class Game {
     this.lobby = null
     audio.deathSting()
     document.exitPointerLock?.()
+    // on touch devices the look-zone/buttons otherwise sit above the game-over
+    // screen (higher z-index) and swallow the tap meant for RISE AGAIN
+    this.input.hideTouchControls()
     this.hud.showGameOver(
       this.netMode === 'client' ? this.clientWave : this.waves.wave,
       this.waves.kills,
@@ -1209,6 +1212,13 @@ export class Game {
           })
         }
         this.meleeCooldown = Math.max(0, this.meleeCooldown - dt)
+        if (this.input.isTouch) {
+          this.input.setMeleeAvailable(
+            !this.player.downed &&
+              this.meleeCooldown <= 0 &&
+              this.isNearAnyZombie(this.player.pos, MELEE_RANGE),
+          )
+        }
         if (isGrabbed) {
           // held aloft — arms are pinned, no melee/shopping, but still free to shoot
           this.hud.setPrompt(null)

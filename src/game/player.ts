@@ -192,21 +192,21 @@ export class Player {
     if (input.consumeJump() && this.grounded) {
       if (this.crouched) {
         this.crouched = false // stand up instead of jumping
-      } else {
-        const fwdX = -Math.sin(this.yaw)
-        const fwdZ = -Math.cos(this.yaw)
-        if (this.probeVault(colliders, fwdX, fwdZ)) {
-          this.vaulting = true
-          this.vaultElapsed = 0
-          this.vaultStartX = this.pos.x
-          this.vaultStartZ = this.pos.z
-          this.vaultDirX = fwdX
-          this.vaultDirZ = fwdZ
-        } else {
-          this.velY = JUMP_VELOCITY
-        }
+      } else if (!this.startVault(colliders)) {
+        this.velY = JUMP_VELOCITY
         this.grounded = false
       }
+    }
+    // touch has no reliable jump-timing gesture for vaulting, so walking into a
+    // low obstacle vaults automatically instead of requiring the jump button
+    if (
+      input.isTouch &&
+      !this.vaulting &&
+      this.grounded &&
+      !this.crouched &&
+      move.z > 0.3
+    ) {
+      this.startVault(colliders)
     }
     if (!this.vaulting) {
       this.velY -= GRAVITY * dt
@@ -259,6 +259,21 @@ export class Player {
   /** A collider blocks horizontally only if its top is above the player's feet. */
   private blocks(c: Collider): boolean {
     return (c.height ?? Infinity) > this.pos.y + 0.05
+  }
+
+  /** Kicks off the vault arc if something vaultable is ahead. Returns whether it did. */
+  private startVault(colliders: Collider[]): boolean {
+    const fwdX = -Math.sin(this.yaw)
+    const fwdZ = -Math.cos(this.yaw)
+    if (!this.probeVault(colliders, fwdX, fwdZ)) return false
+    this.vaulting = true
+    this.vaultElapsed = 0
+    this.vaultStartX = this.pos.x
+    this.vaultStartZ = this.pos.z
+    this.vaultDirX = fwdX
+    this.vaultDirZ = fwdZ
+    this.grounded = false
+    return true
   }
 
   /** Is there a vaultable (low, non-wall) obstacle directly ahead? */

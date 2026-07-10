@@ -147,6 +147,11 @@ export class Input {
     document.getElementById('touch-controls')?.classList.remove('visible')
   }
 
+  /** The center-screen melee prompt only shows while a zombie is in melee range. */
+  setMeleeAvailable(available: boolean) {
+    document.getElementById('btn-melee')?.classList.toggle('visible', available)
+  }
+
   /** Is this key currently held? (desktop only — always false on touch). */
   isDown(code: string): boolean {
     return this.keys.has(code)

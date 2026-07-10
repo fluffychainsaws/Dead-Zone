@@ -1142,13 +1142,22 @@ body {
   font-size: 1.25rem;
 }
 
+/* only appears when a zombie is in melee range — replaces an always-on button
+   so the screen isn't cluttered the rest of the time */
 #btn-melee {
-  right: calc(env(safe-area-inset-right) + 30px);
-  bottom: calc(env(safe-area-inset-bottom) + 184px);
-  width: 56px;
-  height: 56px;
-  font-size: 1.3rem;
-  border-color: rgba(224, 32, 32, 0.5);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% + 90px));
+  width: 64px;
+  height: 64px;
+  font-size: 1.4rem;
+  border-color: rgba(224, 32, 32, 0.6);
+  background: rgba(40, 8, 8, 0.5);
+  display: none;
+}
+
+#btn-melee.visible {
+  display: block;
 }
 
 #btn-swap {
