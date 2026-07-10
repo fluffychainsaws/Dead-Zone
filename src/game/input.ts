@@ -210,7 +210,6 @@ export class Input {
       <div id="joy-zone"></div>
       <div id="look-zone"></div>
       <button id="btn-aim" aria-label="Aim down sights"></button>
-      <button id="btn-reload">R</button>
       <button id="btn-swap">⇄</button>
       <button id="btn-jump">▲</button>
       <button id="btn-crouch">⤓</button>
@@ -261,12 +260,29 @@ export class Input {
     let lookId = -1
     let lastX = 0
     let lastY = 0
+    let lastTapTime = 0
+    let lastTapX = 0
+    let lastTapY = 0
+    const DOUBLE_TAP_MS = 320
+    const DOUBLE_TAP_RADIUS = 40
     lookZone.addEventListener('pointerdown', (e) => {
       if (lookId !== -1) return
       lookId = e.pointerId
       lookZone.setPointerCapture(e.pointerId)
       lastX = e.clientX
       lastY = e.clientY
+
+      // double-tap anywhere on the right side to reload
+      const now = performance.now()
+      const dist = Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY)
+      if (now - lastTapTime < DOUBLE_TAP_MS && dist < DOUBLE_TAP_RADIUS) {
+        this.reloadPresses++
+        lastTapTime = 0 // consumed — a third quick tap starts a fresh pair
+      } else {
+        lastTapTime = now
+        lastTapX = e.clientX
+        lastTapY = e.clientY
+      }
     })
     lookZone.addEventListener('pointermove', (e) => {
       if (e.pointerId !== lookId) return
@@ -290,10 +306,6 @@ export class Input {
     aim.addEventListener('pointerup', aimEnd)
     aim.addEventListener('pointercancel', aimEnd)
 
-    root.querySelector('#btn-reload')!.addEventListener('pointerdown', (e) => {
-      e.preventDefault()
-      this.reloadPresses++
-    })
     root.querySelector('#btn-interact')!.addEventListener('pointerdown', (e) => {
       e.preventDefault()
       this.interactPresses++

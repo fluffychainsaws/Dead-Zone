@@ -435,6 +435,13 @@ export class WeaponSystem {
       return []
     }
 
+    // mobile has no fire button to "attempt" a shot with an empty mag and trigger
+    // the reload-on-dry-fire path below, so reload the moment the mag hits zero
+    if (input.isTouch && w.mag <= 0 && w.reserve > 0) {
+      this.startReload()
+      return []
+    }
+
     // mobile convenience: fire automatically whenever the reticle happens to rest on a
     // zombie, so players aren't forced to mash the fire button — the camera/aim itself
     // is never adjusted, so this is not an aim-assist

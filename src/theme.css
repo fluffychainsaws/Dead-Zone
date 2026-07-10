@@ -1126,14 +1126,6 @@ body {
     9px 0 0 -1px rgba(255, 60, 60, 0.85);
 }
 
-#btn-reload {
-  right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 44px);
-  width: 56px;
-  height: 56px;
-  font-size: 1rem;
-}
-
 #btn-jump {
   right: calc(env(safe-area-inset-right) + 30px);
   bottom: calc(env(safe-area-inset-bottom) + 112px);
@@ -1161,15 +1153,15 @@ body {
 
 #btn-swap {
   right: calc(env(safe-area-inset-right) + 104px);
-  bottom: calc(env(safe-area-inset-bottom) + 188px);
+  bottom: calc(env(safe-area-inset-bottom) + 44px);
   width: 52px;
   height: 52px;
   font-size: 1.3rem;
 }
 
 #btn-light {
-  right: calc(env(safe-area-inset-right) + 30px);
-  bottom: calc(env(safe-area-inset-bottom) + 256px);
+  right: calc(env(safe-area-inset-right) + 104px);
+  bottom: calc(env(safe-area-inset-bottom) + 188px);
   width: 52px;
   height: 52px;
   font-size: 1.2rem;
