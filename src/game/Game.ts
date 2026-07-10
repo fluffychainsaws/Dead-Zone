@@ -516,7 +516,7 @@ export class Game {
     if (this.ownsFlashlight) modes.push('flashlight')
     if (this.ownsNVG) modes.push('nvg')
     if (modes.length === 1) {
-      this.hud.banner('NO LIGHT SOURCE — BUY ONE IN THE LAB', 2000)
+      this.hud.banner('NO LIGHT', 2000)
       return
     }
     const idx = modes.indexOf(this.lightMode)
