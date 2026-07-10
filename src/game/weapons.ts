@@ -587,8 +587,8 @@ function addRedDot(g: THREE.Group, dark: THREE.Material, x: number, y: number, z
   top.position.set(x, y + 0.018, z)
   g.add(top)
   const dot = new THREE.Mesh(
-    new THREE.SphereGeometry(0.006, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff2020 }),
+    new THREE.SphereGeometry(0.003, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.7 }),
   )
   dot.position.set(x, y, z)
   g.add(dot)
