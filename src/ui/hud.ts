@@ -25,7 +25,7 @@ export class Hud {
   private lastWeapon = ''
   private lastHealth = ''
 
-  constructor(isTouch: boolean) {
+  constructor() {
     this.root = document.createElement('div')
     this.root.id = 'hud'
     this.root.innerHTML = `
@@ -49,11 +49,6 @@ export class Hud {
       <div id="weapon-name"></div>
       <div id="light-status"></div>
       <div id="ammo">--</div>
-      <div id="hint">${
-        isTouch
-          ? 'Left: move · Right: aim · Auto-fires on target · ADS to zoom'
-          : 'WASD move · Shift sprint · Right-click ADS · Space jump/vault · Ctrl crouch · V melee · R reload'
-      }</div>
       <div id="game-over">
         <h2>YOU DIED</h2>
         <p id="go-stats"></p>

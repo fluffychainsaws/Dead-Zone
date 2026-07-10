@@ -148,7 +148,7 @@ export class Game {
     this.updateClawCollider(this.mysteryBox.pos.x, this.mysteryBox.pos.z)
     this.arena.playerColliders.push(this.clawCollider)
     this.arena.zombieColliders.push(this.clawCollider)
-    this.hud = new Hud(this.input.isTouch)
+    this.hud = new Hud()
     this.horde = new Horde(this.scene)
     this.remoteZombies = new RemoteZombieField(this.scene)
     this.waves = new WaveSystem(this.horde, () => this.arena.activeSpawns(), {

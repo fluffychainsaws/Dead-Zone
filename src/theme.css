@@ -852,19 +852,6 @@ body {
   text-shadow: 0 0 8px rgba(224, 32, 32, 0.6);
 }
 
-#hint {
-  position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
-  transform: translateX(-50%);
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  opacity: 0.7;
-  white-space: nowrap;
-}
-
 /* ---------------- revive markers ---------------- */
 
 .revive-marker {
