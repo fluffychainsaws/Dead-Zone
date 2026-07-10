@@ -545,7 +545,7 @@ export class WeaponSystem {
     const sightY = (vm.userData.sightY as number | undefined) ?? 0
     const aimX = -sightX * fullAimScale
     const aimY = -sightY * fullAimScale
-    const aimZ = -0.5
+    const aimZ = -0.4
     const k = this.aimK
     vm.position.set(
       hipX + (aimX - hipX) * k,
@@ -555,16 +555,22 @@ export class WeaponSystem {
     vm.scale.setScalar(1 - 0.14 * k)
     vm.rotation.x = this.kick * 0.09 - meleeK * 0.5
 
-    // support hand: dips down toward the magwell mid-reload (mag-out/mag-in) and
-    // returns to the foregrip once the new mag is seated
+    // support hand: reaches for a fresh mag mid-reload and seats it, then returns
+    // to rest — handguns pull the mag straight up into the grip's base, long guns
+    // pull one in from the front of the magwell
     const arm = vm.userData.leftArm as THREE.Group | undefined
     if (arm) {
       const restY = vm.userData.armRestY as number
       const restZ = vm.userData.armRestZ as number
       const reloadProgress = this.reloading ? 1 - this.reloadT / this.active.def.reloadTime : 0
       const grabK = Math.sin(Math.min(1, Math.max(0, reloadProgress)) * Math.PI)
-      arm.position.y = restY - grabK * 0.14
-      arm.position.z = restZ + grabK * 0.16
+      if (vm.userData.reloadStyle === 'bottom') {
+        arm.position.y = restY - grabK * 0.2
+        arm.position.z = restZ
+      } else {
+        arm.position.y = restY - grabK * 0.14
+        arm.position.z = restZ + grabK * 0.16
+      }
     }
   }
 }
@@ -1000,25 +1006,45 @@ export function buildViewmodel(defId: string): THREE.Group {
     handle.rotation.x = 0.25
     g.add(handle)
   }
-  // support hand: rests under the foregrip and slides down/back toward the magwell
-  // during reload — every weapon gets one except the dual pistols, which have no
-  // free hand to spare
+  // arms: every weapon gets a left (support) hand and a right (trigger) hand
+  // except the dual pistols, which already have one gun in each hand
   if (kind !== 'dualpistols') {
     const skin = new THREE.MeshLambertMaterial({ color: 0xc79a72 })
     const sleeve = new THREE.MeshLambertMaterial({ color: 0x2e3b26 })
-    const arm = new THREE.Group()
-    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.3, 8), sleeve)
-    forearm.rotation.x = Math.PI / 2
-    forearm.position.set(0, 0, 0.12)
-    arm.add(forearm)
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.09), skin)
-    hand.position.set(0, 0, -0.05)
-    arm.add(hand)
-    arm.position.set(-0.08, -0.06, -0.14)
-    g.add(arm)
-    g.userData.leftArm = arm
-    g.userData.armRestY = arm.position.y
-    g.userData.armRestZ = arm.position.z
+
+    // handguns (pistol/magnum/liberator/hellfire) load a magazine straight up
+    // into the bottom of the grip; long guns load forward into a magwell in
+    // front of the trigger guard
+    const bottomLoad = kind === 'pistol' || kind === 'magnum' || kind === 'liberator' || kind === 'hellfire'
+    g.userData.reloadStyle = bottomLoad ? 'bottom' : 'forward'
+
+    // left/support hand — cradles the foregrip (or the frame, on handguns) and
+    // does the actual reload motion
+    const leftArm = new THREE.Group()
+    const leftForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.3, 8), sleeve)
+    leftForearm.rotation.x = Math.PI / 2
+    leftForearm.position.set(0, 0, 0.12)
+    leftArm.add(leftForearm)
+    const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.09), skin)
+    leftHand.position.set(0, 0, -0.05)
+    leftArm.add(leftHand)
+    leftArm.position.set(bottomLoad ? -0.045 : -0.08, bottomLoad ? -0.13 : -0.06, bottomLoad ? 0.05 : -0.14)
+    g.add(leftArm)
+    g.userData.leftArm = leftArm
+    g.userData.armRestY = leftArm.position.y
+    g.userData.armRestZ = leftArm.position.z
+
+    // right/trigger hand — stays on the grip, doesn't move during reload
+    const rightArm = new THREE.Group()
+    const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.28, 8), sleeve)
+    rightForearm.rotation.x = Math.PI / 2
+    rightForearm.position.set(0, 0, 0.14)
+    rightArm.add(rightForearm)
+    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.06, 0.09), skin)
+    rightHand.position.set(0, 0, 0.02)
+    rightArm.add(rightHand)
+    rightArm.position.set(0.06, -0.1, 0.07)
+    g.add(rightArm)
   }
   g.position.set(0.28, -0.26, -0.55)
   return g
