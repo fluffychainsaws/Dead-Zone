@@ -95,6 +95,7 @@ export class MysteryBox {
   private prizeBox: THREE.Group | null = null
   private trayBox: THREE.Group | null = null
   private breakT = 0
+  private ownsWeapon: ((id: string) => boolean) | null = null
 
   private phase: Phase = 'toPile'
   private phaseT = 0
@@ -269,15 +270,25 @@ export class MysteryBox {
     }
   }
 
-  /** Call after payment succeeded — starts the claw sequence. */
-  play() {
+  /** Call after payment succeeded — starts the claw sequence. `ownsWeapon` lets
+   *  the box avoid offering something already in the player's loadout. */
+  play(ownsWeapon: (id: string) => boolean) {
     if (this.state !== 'idle' || this.pile.length === 0) return
     this.state = 'busy'
     this.phase = 'toPile'
     this.phaseT = 0
     this.offered = null // decided at the end of the 'choosing' phase, for real suspense
+    this.ownsWeapon = ownsWeapon
     this.grabbedPile = this.pile[Math.floor(Math.random() * this.pile.length)]
     this.setProngs(1)
+  }
+
+  /** Box weapons not already owned — falls back to the full list if somehow all
+   *  of them are (never happens with only 2 loadout slots, but stay safe). */
+  private availablePool(): WeaponDef[] {
+    if (!this.ownsWeapon) return BOX_WEAPONS
+    const pool = BOX_WEAPONS.filter((w) => !this.ownsWeapon!(w.id))
+    return pool.length > 0 ? pool : BOX_WEAPONS
   }
 
   /** Break open the box waiting in the tray. Returns the weapon it turns out to be. */
@@ -332,18 +343,20 @@ export class MysteryBox {
           this.prizeBox.rotation.set(0, 0, 0)
         }
         break
-      case 'choosing':
+      case 'choosing': {
         // claw holds still with the box while the prize is decided — the suspense beat
+        const pool = this.availablePool()
         if (this.phaseT % 0.15 < dt) {
-          const random = BOX_WEAPONS[Math.floor(Math.random() * BOX_WEAPONS.length)]
+          const random = pool[Math.floor(Math.random() * pool.length)]
           this.drawLabel(random.name, '???')
           this.onTick?.()
         }
         if (t >= 1) {
-          this.offered = BOX_WEAPONS[Math.floor(Math.random() * BOX_WEAPONS.length)]
+          this.offered = pool[Math.floor(Math.random() * pool.length)]
           this.drawLabel('IT’S DECIDED…', '???')
         }
         break
+      }
       case 'ascend':
         this.claw.position.y = (PILE_Y + 0.14) + (RAIL_Y - (PILE_Y + 0.14)) * e
         break

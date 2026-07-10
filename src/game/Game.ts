@@ -793,7 +793,7 @@ export class Game {
       if (this.economy.spend(BOX_COST)) {
         this.hud.setPoints(this.economy.points)
         this.hud.pointsDelta(-BOX_COST)
-        this.mysteryBox.play()
+        this.mysteryBox.play((id) => this.weapon.owns(id))
         audio.purchase()
       } else {
         this.hud.banner('NOT ENOUGH POINTS', 1200)
