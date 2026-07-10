@@ -254,6 +254,10 @@ export class WeaponSystem {
   private stashedIdx: number | null = null
   private downedTemp: WeaponInstance | null = null
   private downedMode = false
+  /** True right after a reload/switch — blocks auto weapons from resuming fire
+   *  just because the mouse button is still physically held down; cleared once
+   *  the player actually releases it. */
+  private suppressAutoFire = false
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera
@@ -364,6 +368,7 @@ export class WeaponSystem {
 
   private cancelReload() {
     this.reloading = false
+    this.suppressAutoFire = true // switching/downing shouldn't insta-fire on a held trigger
     if (this.slots[this.activeIdx]) this.active.viewmodel.rotation.x = 0
   }
 
@@ -376,7 +381,11 @@ export class WeaponSystem {
     effects: Effects,
   ): ShotHit[] {
     this.events = { fired: false, dryFired: false, reloadStarted: false }
-    if (input.consumeSwitch()) this.switchNext()
+    if (input.consumeSwitch()) {
+      this.switchNext()
+      input.clearFirePress()
+    }
+    if (!input.fireHeld) this.suppressAutoFire = false // trigger released — armed again
 
     const w = this.active
     this.cooldown = Math.max(0, this.cooldown - dt)
@@ -390,6 +399,10 @@ export class WeaponSystem {
 
     if (this.reloading) {
       this.reloadT -= dt
+      // keep the gun easing back toward hip position throughout the reload —
+      // otherwise a reload started mid-ADS freezes the gun up near the camera,
+      // then snaps down to hip the instant the reload finishes
+      this.applyViewmodelMotion()
       w.viewmodel.rotation.x = -0.7 * Math.sin((1 - this.reloadT / w.def.reloadTime) * Math.PI)
       if (this.reloadT <= 0) {
         this.reloading = false
@@ -398,6 +411,10 @@ export class WeaponSystem {
         w.mag += take
         w.reserve -= take
         w.viewmodel.rotation.x = 0
+        // a click that landed mid-reload shouldn't fire the instant it's ready,
+        // and a held trigger on an auto weapon needs a fresh press to resume
+        input.clearFirePress()
+        this.suppressAutoFire = true
       }
       return []
     }
@@ -407,7 +424,7 @@ export class WeaponSystem {
       return []
     }
 
-    const wantsFire = w.def.auto ? input.fireHeld : input.consumeFirePress()
+    const wantsFire = w.def.auto ? input.fireHeld && !this.suppressAutoFire : input.consumeFirePress()
     if (!wantsFire || this.cooldown > 0) {
       this.applyViewmodelMotion()
       return []
@@ -491,20 +508,21 @@ export class WeaponSystem {
   }
 }
 
-/** An open-frame reflex sight — front/rear posts bridged by a top rail, with a
- *  glowing dot floating in the window. Used on every gun in place of iron sights. */
+/** An open-frame reflex sight — left/right posts bridged by a top rail, with a
+ *  glowing dot floating in the window facing the shooter. Used on every gun in
+ *  place of iron sights. */
 function addRedDot(g: THREE.Group, dark: THREE.Material, x: number, y: number, z: number) {
-  const riser = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.025, 0.045), dark)
+  const riser = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.025, 0.03), dark)
   riser.position.set(x, y - 0.025, z)
   g.add(riser)
-  const uprightGeo = new THREE.BoxGeometry(0.022, 0.032, 0.012)
-  const front = new THREE.Mesh(uprightGeo, dark)
-  front.position.set(x, y, z - 0.028)
-  g.add(front)
-  const back = new THREE.Mesh(uprightGeo.clone(), dark)
-  back.position.set(x, y, z + 0.028)
-  g.add(back)
-  const top = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.008, 0.07), dark)
+  const uprightGeo = new THREE.BoxGeometry(0.012, 0.032, 0.022)
+  const left = new THREE.Mesh(uprightGeo, dark)
+  left.position.set(x - 0.028, y, z)
+  g.add(left)
+  const right = new THREE.Mesh(uprightGeo.clone(), dark)
+  right.position.set(x + 0.028, y, z)
+  g.add(right)
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.008, 0.022), dark)
   top.position.set(x, y + 0.018, z)
   g.add(top)
   const dot = new THREE.Mesh(

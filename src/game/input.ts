@@ -65,6 +65,12 @@ export class Input {
     return false
   }
 
+  /** Drops a queued click that landed mid-reload/switch — it shouldn't fire the
+   *  instant the weapon becomes ready again. */
+  clearFirePress() {
+    this.firePresses = 0
+  }
+
   consumeReload(): boolean {
     if (this.reloadPresses > 0) {
       this.reloadPresses--
