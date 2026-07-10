@@ -152,7 +152,31 @@ export class AudioEngine {
     pulseGate.start()
     this.musicNodes.pulseGain = pulseGain
 
+    // distant wind — filtered noise with a slow breathing sweep, barely audible
+    // but fills the silence between motifs with unease instead of dead air
+    const windSrc = ctx.createBufferSource()
+    windSrc.buffer = this.noiseBuf
+    windSrc.loop = true
+    const windFilter = ctx.createBiquadFilter()
+    windFilter.type = 'bandpass'
+    windFilter.frequency.value = 300
+    windFilter.Q.value = 0.7
+    const windGain = ctx.createGain()
+    windGain.gain.value = 0.028
+    const windLfo = ctx.createOscillator()
+    windLfo.frequency.value = 0.037
+    const windLfoGain = ctx.createGain()
+    windLfoGain.gain.value = 220
+    windLfo.connect(windLfoGain)
+    windLfoGain.connect(windFilter.frequency)
+    windSrc.connect(windFilter)
+    windFilter.connect(windGain)
+    windGain.connect(out)
+    windSrc.start()
+    windLfo.start()
+
     this.scheduleMotif()
+    this.scheduleMusicBox()
   }
 
   setIntensity(level: number) {
@@ -216,8 +240,8 @@ export class AudioEngine {
   private playMotif() {
     if (!this.ctx || !this.settings.music) return
     const ctx = this.ctx
-    // A phrygian fragments — minor seconds for unease
-    const scale = [220, 233.08, 261.63, 329.63, 349.23]
+    // A phrygian fragments — minor seconds and a tritone for unease
+    const scale = [220, 233.08, 261.63, 311.13, 329.63, 349.23]
     const notes = 2 + Math.floor(Math.random() * 2)
     // shared airy feedback delay
     const delay = ctx.createDelay()
@@ -244,6 +268,45 @@ export class AudioEngine {
       g.connect(delay)
       o.start(t)
       o.stop(t + 2.5)
+    }
+  }
+
+  private scheduleMusicBox() {
+    const delay = 14000 + Math.random() * 16000
+    setTimeout(() => {
+      this.playMusicBox()
+      this.scheduleMusicBox()
+    }, delay)
+  }
+
+  /** A haunted-music-box fragment — the classic "wrong nursery rhyme" horror
+   *  cue. Rare and quiet; it's meant to catch players off guard, not loop. */
+  private playMusicBox() {
+    if (!this.ctx || !this.settings.music) return
+    const ctx = this.ctx
+    const scale = [523.25, 587.33, 622.25, 698.46, 739.99, 830.61]
+    const length = 4 + Math.floor(Math.random() * 3)
+    const out = ctx.createGain()
+    out.gain.value = 0.065
+    out.connect(this.musicBus)
+    for (let i = 0; i < length; i++) {
+      const t = ctx.currentTime + i * (0.4 + Math.random() * 0.08)
+      const freq = scale[Math.floor(Math.random() * scale.length)]
+      // two barely-detuned sines — a tuning-fork tone that's just slightly wrong
+      for (const detune of [0, 7]) {
+        const o = ctx.createOscillator()
+        o.type = 'sine'
+        o.frequency.value = freq
+        o.detune.value = detune
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0, t)
+        g.gain.linearRampToValueAtTime(0.5, t + 0.008)
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1)
+        o.connect(g)
+        g.connect(out)
+        o.start(t)
+        o.stop(t + 1.2)
+      }
     }
   }
 
