@@ -468,6 +468,11 @@ export class Game {
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10)
     this.camera.updateProjectionMatrix()
     this.hud.setScopeOverlay(this.weapon.aiming && !!ads?.scope)
+    // red-dot weapons: hide the green crosshair once the sight has risen into
+    // view — the dot itself is the aim point from there
+    this.hud.setAdsCrosshairHidden(
+      this.weapon.aiming && !!ads && !ads.scope && this.weapon.aimAmount > 0.5,
+    )
   }
 
   private zombieNav() {

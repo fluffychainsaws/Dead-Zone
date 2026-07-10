@@ -90,13 +90,27 @@ export class Hud {
   }
 
   private scopeActive = false
+  private adsHideCrosshair = false
   private midgetActive = false
 
   setScopeOverlay(active: boolean) {
     if (active === this.scopeActive) return
     this.scopeActive = active
     this.scopeEl.classList.toggle('active', active)
-    this.crosshairEl.style.visibility = active ? 'hidden' : 'visible'
+    this.updateCrosshairVisibility()
+  }
+
+  /** Hides the green crosshair while aiming down a red-dot sight — the dot itself
+   *  is the aim point once it's risen into view. */
+  setAdsCrosshairHidden(hidden: boolean) {
+    if (hidden === this.adsHideCrosshair) return
+    this.adsHideCrosshair = hidden
+    this.updateCrosshairVisibility()
+  }
+
+  private updateCrosshairVisibility() {
+    const hide = this.scopeActive || this.adsHideCrosshair
+    this.crosshairEl.style.visibility = hide ? 'hidden' : 'visible'
   }
 
   setMidgetOverlay(active: boolean) {

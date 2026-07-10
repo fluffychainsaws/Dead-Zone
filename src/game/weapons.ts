@@ -248,6 +248,11 @@ export class WeaponSystem {
   private kick = 0
   private meleeT = 0
   private aimK = 0 // smoothed 0..1 aim-down-sights blend
+
+  /** Smoothed 0..1 aim-down-sights blend — 1 once fully raised into position. */
+  get aimAmount(): number {
+    return this.aimK
+  }
   private raycaster = new THREE.Raycaster()
   private camera: THREE.PerspectiveCamera
   private visible = false
