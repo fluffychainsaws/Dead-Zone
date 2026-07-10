@@ -207,7 +207,7 @@ export class Input {
     const root = document.createElement('div')
     root.id = 'touch-controls'
     root.innerHTML = `
-      <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
+      <div id="joy-zone"></div>
       <div id="look-zone"></div>
       <button id="btn-aim" aria-label="Aim down sights"></button>
       <button id="btn-reload">R</button>
@@ -221,8 +221,6 @@ export class Input {
     document.getElementById('app')!.appendChild(root)
 
     const joyZone = root.querySelector<HTMLElement>('#joy-zone')!
-    const joyBase = root.querySelector<HTMLElement>('#joy-base')!
-    const joyKnob = root.querySelector<HTMLElement>('#joy-knob')!
     const lookZone = root.querySelector<HTMLElement>('#look-zone')!
 
     let joyId = -1
@@ -230,15 +228,14 @@ export class Input {
     let joyCY = 0
     const RADIUS = 52
 
+    // no visible stick — just touch anywhere on the left half and drag; the
+    // touch-down point becomes the invisible center
     joyZone.addEventListener('pointerdown', (e) => {
       if (joyId !== -1) return
       joyId = e.pointerId
       joyZone.setPointerCapture(e.pointerId)
       joyCX = e.clientX
       joyCY = e.clientY
-      joyBase.style.left = `${e.clientX}px`
-      joyBase.style.top = `${e.clientY}px`
-      joyBase.classList.add('active')
     })
     joyZone.addEventListener('pointermove', (e) => {
       if (e.pointerId !== joyId) return
@@ -249,7 +246,6 @@ export class Input {
         dx = (dx / len) * RADIUS
         dy = (dy / len) * RADIUS
       }
-      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`
       this.joyX = dx / RADIUS
       this.joyY = dy / RADIUS
     })
@@ -258,8 +254,6 @@ export class Input {
       joyId = -1
       this.joyX = 0
       this.joyY = 0
-      joyKnob.style.transform = ''
-      joyBase.classList.remove('active')
     }
     joyZone.addEventListener('pointerup', joyEnd)
     joyZone.addEventListener('pointercancel', joyEnd)
