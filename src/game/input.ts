@@ -138,6 +138,15 @@ export class Input {
     if (!this.isTouch && !this.locked) this.canvas.requestPointerLock()
   }
 
+  /** Touch buttons/joysticks stay hidden over the menus and only appear once play begins. */
+  showTouchControls() {
+    document.getElementById('touch-controls')?.classList.add('visible')
+  }
+
+  hideTouchControls() {
+    document.getElementById('touch-controls')?.classList.remove('visible')
+  }
+
   /** Is this key currently held? (desktop only — always false on touch). */
   isDown(code: string): boolean {
     return this.keys.has(code)

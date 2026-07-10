@@ -253,6 +253,12 @@ export class WeaponSystem {
   get aimAmount(): number {
     return this.aimK
   }
+
+  /** 0..1 reload completion fraction — 0 when not reloading. */
+  get reloadProgress(): number {
+    if (!this.reloading) return 0
+    return 1 - this.reloadT / this.active.def.reloadTime
+  }
   private raycaster = new THREE.Raycaster()
   private camera: THREE.PerspectiveCamera
   private visible = false
@@ -429,7 +435,13 @@ export class WeaponSystem {
       return []
     }
 
-    const wantsFire = w.def.auto ? input.fireHeld && !this.suppressAutoFire : input.consumeFirePress()
+    // mobile convenience: fire automatically whenever the reticle happens to rest on a
+    // zombie, so players aren't forced to mash the fire button — the camera/aim itself
+    // is never adjusted, so this is not an aim-assist
+    const crosshairOnZombie = input.isTouch && this.isZombieUnderCrosshair(camera, targets)
+    const wantsFire = w.def.auto
+      ? (input.fireHeld || crosshairOnZombie) && !this.suppressAutoFire
+      : input.consumeFirePress() || crosshairOnZombie
     if (!wantsFire || this.cooldown > 0) {
       this.applyViewmodelMotion()
       return []
@@ -493,6 +505,22 @@ export class WeaponSystem {
     return hits
   }
 
+  /** Whether the camera's center ray currently lands on a zombie before anything else (walls block it). */
+  private isZombieUnderCrosshair(camera: THREE.PerspectiveCamera, targets: THREE.Object3D[]): boolean {
+    const dir = new THREE.Vector3()
+    camera.getWorldDirection(dir)
+    this.raycaster.set(camera.getWorldPosition(new THREE.Vector3()), dir)
+    this.raycaster.far = 120
+    const first = this.raycaster.intersectObjects(targets, true)[0]
+    if (!first) return false
+    let obj: THREE.Object3D | null = first.object
+    while (obj) {
+      if (obj.userData.zombie) return true
+      obj = obj.parent
+    }
+    return false
+  }
+
   private startReload() {
     this.reloading = true
     this.reloadT = this.active.def.reloadTime
@@ -526,6 +554,18 @@ export class WeaponSystem {
     )
     vm.scale.setScalar(1 - 0.14 * k)
     vm.rotation.x = this.kick * 0.09 - meleeK * 0.5
+
+    // support hand: dips down toward the magwell mid-reload (mag-out/mag-in) and
+    // returns to the foregrip once the new mag is seated
+    const arm = vm.userData.leftArm as THREE.Group | undefined
+    if (arm) {
+      const restY = vm.userData.armRestY as number
+      const restZ = vm.userData.armRestZ as number
+      const reloadProgress = this.reloading ? 1 - this.reloadT / this.active.def.reloadTime : 0
+      const grabK = Math.sin(Math.min(1, Math.max(0, reloadProgress)) * Math.PI)
+      arm.position.y = restY - grabK * 0.14
+      arm.position.z = restZ + grabK * 0.16
+    }
   }
 }
 
@@ -573,7 +613,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(0, 0.04, -0.46)
     g.add(barrel)
-    addRedDot(g, dark, 0, 0.11, -0.32)
+    addRedDot(g, dark, 0, 0.11, -0.14)
     const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.32, 8), drab)
     handguard.rotation.x = Math.PI / 2
     handguard.position.set(0, 0.02, -0.28)
@@ -586,8 +626,8 @@ export function buildViewmodel(defId: string): THREE.Group {
     }
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.11, 0.36), drab)
     g.add(body)
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.09), dark)
-    mag.position.set(0, 0.14, -0.1) // top-mounted, unlike the SAW's belt box
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.08), dark)
+    mag.position.set(0, -0.11, -0.14) // belt box hangs below the receiver, out of the sight line
     g.add(mag)
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.22), drab)
     stock.position.set(0, -0.01, 0.27)
@@ -959,6 +999,26 @@ export function buildViewmodel(defId: string): THREE.Group {
     handle.position.set(0, -0.11, 0.03)
     handle.rotation.x = 0.25
     g.add(handle)
+  }
+  // support hand: rests under the foregrip and slides down/back toward the magwell
+  // during reload — every weapon gets one except the dual pistols, which have no
+  // free hand to spare
+  if (kind !== 'dualpistols') {
+    const skin = new THREE.MeshLambertMaterial({ color: 0xc79a72 })
+    const sleeve = new THREE.MeshLambertMaterial({ color: 0x2e3b26 })
+    const arm = new THREE.Group()
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.3, 8), sleeve)
+    forearm.rotation.x = Math.PI / 2
+    forearm.position.set(0, 0, 0.12)
+    arm.add(forearm)
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.09), skin)
+    hand.position.set(0, 0, -0.05)
+    arm.add(hand)
+    arm.position.set(-0.08, -0.06, -0.14)
+    g.add(arm)
+    g.userData.leftArm = arm
+    g.userData.armRestY = arm.position.y
+    g.userData.armRestZ = arm.position.z
   }
   g.position.set(0.28, -0.26, -0.55)
   return g

@@ -13,6 +13,7 @@ export class Hud {
   private hitmarkerEl: HTMLElement
   private weaponEl: HTMLElement
   private crosshairEl: HTMLElement
+  private reloadBarFillEl: HTMLElement
   private scopeEl: HTMLElement
   private midgetEl: HTMLElement
   private lightEl: HTMLElement
@@ -31,6 +32,7 @@ export class Hud {
       <div id="vignette"></div>
       <div id="version-badge">PHASE 23.1</div>
       <div id="crosshair"></div>
+      <div id="reload-bar"><div id="reload-bar-fill"></div></div>
       <div id="scope-overlay"><div class="lens"><div class="reticle"></div></div></div>
       <div id="midget-overlay">
         <div class="claws"></div>
@@ -70,6 +72,7 @@ export class Hud {
     this.hitmarkerEl = this.root.querySelector('#hitmarker')!
     this.weaponEl = this.root.querySelector('#weapon-name')!
     this.crosshairEl = this.root.querySelector('#crosshair')!
+    this.reloadBarFillEl = this.root.querySelector('#reload-bar-fill')!
     this.scopeEl = this.root.querySelector('#scope-overlay')!
     this.midgetEl = this.root.querySelector('#midget-overlay')!
     this.lightEl = this.root.querySelector('#light-status')!
@@ -179,6 +182,13 @@ export class Hud {
     this.hitmarkerEl.className = `show ${kind}`
     if (this.hitTimer) clearTimeout(this.hitTimer)
     this.hitTimer = setTimeout(() => (this.hitmarkerEl.className = ''), 110)
+  }
+
+  /** progress is 0..1; pass 0 (or call with reloading=false upstream) to hide the bar. */
+  setReloadProgress(progress: number) {
+    const reloading = progress > 0
+    this.reloadBarFillEl.parentElement!.classList.toggle('active', reloading)
+    if (reloading) this.reloadBarFillEl.style.width = `${progress * 100}%`
   }
 
   setAmmo(mag: number, reserve: number, reloading: boolean) {

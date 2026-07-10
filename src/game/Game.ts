@@ -450,6 +450,7 @@ export class Game {
     this.hud.setPoints(this.economy.points)
     this.lastPlayerPos.copy(this.player.pos)
     this.input.requestLock()
+    this.input.showTouchControls()
     audio.unlock()
     audio.startMusic()
     audio.startClawTune()
@@ -1284,6 +1285,7 @@ export class Game {
       this.handleZeroHp()
 
       this.hud.setAmmo(this.weapon.mag, this.weapon.reserve, this.weapon.reloading)
+      this.hud.setReloadProgress(this.weapon.reloadProgress)
       this.hud.setWeaponName(this.weapon.def.name)
       this.hud.setHealth(this.player.hp, this.player.maxHp, this.player.recentlyHit)
     } else {
