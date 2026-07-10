@@ -537,7 +537,10 @@ export class WeaponSystem {
     // exactly at k=1. Kept close to hip depth (not pulled tight to the camera) so the
     // gun's body doesn't balloon up and block the view. Scoped weapons go further and
     // hide behind the scope overlay instead — their untagged sight offset is just 0.
-    const hipX = 0.28
+    // akimbo already spans both sides of center on its own, so it doesn't need
+    // the usual right-hand-viewmodel offset — otherwise both pistols end up
+    // crowded onto the right half of the screen
+    const hipX = (vm.userData.hipX as number | undefined) ?? 0.28
     const hipY = -0.26
     const hipZ = -0.55
     const fullAimScale = 1 - 0.14
@@ -819,6 +822,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     }
     g.userData.muzzles = muzzles
     g.userData.sightX = 0 // aim between both pistols, not whichever one was tagged last
+    g.userData.hipX = 0.05 // mostly centered — the pair already spans both sides on its own
   } else if (kind === 'chainsaw') {
     // Gas chainsaw: engine block + guide bar + chain, rear handle with trigger
     const chainMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 70 })
