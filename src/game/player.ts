@@ -102,7 +102,14 @@ export class Player {
     this.legR.rotation.x = -swing
   }
 
-  update(dt: number, input: Input, colliders: Collider[], slowed = false, grabbed = false) {
+  update(
+    dt: number,
+    input: Input,
+    colliders: Collider[],
+    slowed = false,
+    grabbed = false,
+    aiming = false,
+  ) {
     if (!this.alive) return
     this.time += dt
     if (
@@ -159,10 +166,14 @@ export class Player {
     this.crouchT += ((this.crouched ? 1 : 0) - this.crouchT) * Math.min(1, dt * 10)
 
     const move = input.moveVec()
+    // desktop only — ADS steadies your aim, so sprinting out of it shouldn't be
+    // possible; touch has no separate sprint key (it's just shoving the stick to
+    // the edge), so leave mobile alone
+    const sprintBlocked = aiming && !input.isTouch
     const speed =
       (this.crouched
         ? CROUCH_SPEED
-        : input.sprint && move.z > 0.3
+        : input.sprint && move.z > 0.3 && !sprintBlocked
           ? SPRINT_SPEED
           : WALK_SPEED) * (slowed ? 0.5 : 1)
     const sin = Math.sin(this.yaw)

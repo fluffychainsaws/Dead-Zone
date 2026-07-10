@@ -1090,7 +1090,14 @@ export class Game {
           return
         }
       } else {
-        this.player.update(dt, this.input, this.arena.playerColliders, isLatched, isGrabbed)
+        this.player.update(
+          dt,
+          this.input,
+          this.arena.playerColliders,
+          isLatched,
+          isGrabbed,
+          this.weapon.aiming,
+        )
         if (this.input.consumeLightToggle()) this.cycleLight()
       }
       // pin a grabbed player's position to whatever's holding them, every frame,
