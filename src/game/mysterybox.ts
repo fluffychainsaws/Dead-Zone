@@ -45,6 +45,11 @@ const PLAY_X_MAX = 0.6
 const PLAY_Z_MIN = -0.48
 const PLAY_Z_MAX = 0.48
 
+// the glass walls' inner faces — pile guns get clamped inside this so nothing
+// pokes through, regardless of how a particular gun happens to tumble
+const WALL_X = 0.74
+const WALL_Z = 0.58
+
 function smoothstep(t: number): number {
   return t * t * (3 - 2 * t)
 }
@@ -215,23 +220,31 @@ export class MysteryBox {
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (wi >= 17) break
-        const x =
+        const targetX =
           PLAY_X_MIN + (c / (cols - 1)) * (PLAY_X_MAX - PLAY_X_MIN) + (Math.random() - 0.5) * 0.09
-        const z =
+        const targetZ =
           PLAY_Z_MIN + (r / (rows - 1)) * (PLAY_Z_MAX - PLAY_Z_MIN) + (Math.random() - 0.5) * 0.09
         const weapon = shuffled[wi++ % shuffled.length]
         const prize = buildTrophyGun(weapon.id, TINY_SCALE)
-        prize.position.set(x, 0, z)
-        // tumbled, not robotically upright — it's a heap of tiny guns
+        prize.position.set(targetX, 0, targetZ)
+        // tumbled, not robotically upright — it's a heap of tiny guns.
+        // overlapping other guns is fine — it's meant to look like a jumble
         prize.rotation.set(
           (Math.random() - 0.5) * 1.4,
           Math.random() * Math.PI * 2,
           (Math.random() - 0.5) * 1.4,
         )
-        // rest the gun's actual lowest point on the floor — tumbling it
-        // however means no fixed Y works for every rotation, so measure it
         prize.updateMatrixWorld(true)
         const box = new THREE.Box3().setFromObject(prize)
+        // pull this gun's actual measured footprint back inside the glass
+        // walls if the tumble made it poke through — never guess a fixed
+        // margin, measure the real extent for whatever this gun turned out to be
+        const x = Math.max(-WALL_X + (targetX - box.min.x), Math.min(WALL_X - (box.max.x - targetX), targetX))
+        const z = Math.max(-WALL_Z + (targetZ - box.min.z), Math.min(WALL_Z - (box.max.z - targetZ), targetZ))
+        prize.position.x = x
+        prize.position.z = z
+        // rest the gun's actual lowest point on the floor — tumbling it
+        // however means no fixed Y works for every rotation, so measure it
         prize.position.y = PILE_Y - box.min.y
         this.group.add(prize)
         this.pile.push({ group: prize, homeX: x, homeZ: z, weapon })
