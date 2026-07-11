@@ -1049,18 +1049,41 @@ export class Arena {
         }
       }
     }
+    const digAtX = cx - 6
     buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
     buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, { at: cz, half: 2.0 }) // east — climb spot
-    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1) // south — solid
+    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1, null, { at: digAtX, half: 2.0 }) // south — dig-under spot
     buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
 
     // zombies climb the fence here — it visibly stands (and still blocks the
-    // player) but the zombie collider is gapped at exactly this spot
+    // player) but the zombie collider is gapped at exactly this spot. The
+    // opening's zone rectangle is kept slightly NARROWER than the actual
+    // collider-free gap (2.0) — if it were wider, a zombie nudged sideways by
+    // flock separation could sit inside the zone (whisker-steering suppressed,
+    // since it's "meant" to be a chokepoint) while still outside the passable
+    // gap and blocked by solid fence — stuck for good, unable to route around
+    // because the zone told it not to bother.
     this.openings.push({
       roomId: 5,
       outside: new THREE.Vector3(COURT_X1 + 2.0, 0, cz),
       inside: new THREE.Vector3(COURT_X1 - 2.0, 0, cz),
-      zone: { minX: COURT_X1 - 3, maxX: COURT_X1 + 3, minZ: cz - 2.5, maxZ: cz + 2.5 },
+      zone: { minX: COURT_X1 - 3, maxX: COURT_X1 + 3, minZ: cz - 1.8, maxZ: cz + 1.8 },
+    })
+
+    // zombies dig under the fence here — same trick, different spot/flavor,
+    // with a couple of dirt piles flanking the gap for the eye
+    const dirtMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 })
+    for (const side of [-1, 1]) {
+      const mound = new THREE.SphereGeometry(0.7, 8, 6)
+      mound.scale(1, 0.4, 1)
+      mound.translate(digAtX + side * 1.3, 0.1, COURT_Z1 + side * 0.4)
+      this.addStatic(mound, dirtMat)
+    }
+    this.openings.push({
+      roomId: 5,
+      outside: new THREE.Vector3(digAtX, 0, COURT_Z1 + 2.0),
+      inside: new THREE.Vector3(digAtX, 0, COURT_Z1 - 2.0),
+      zone: { minX: digAtX - 1.8, maxX: digAtX + 1.8, minZ: COURT_Z1 - 3, maxZ: COURT_Z1 + 3 },
     })
 
     // a manhole zombies crawl straight up out of, already inside the fence line
@@ -1085,29 +1108,72 @@ export class Arena {
       },
     })
 
-    // ---- a battered weight bench, just something for the eye to land on ----
+    // ---- a couple of battered weight benches, something for the eye to land on ----
     const benchMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a })
     const barMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 60 })
-    const benchX = cx - 8
-    const benchZ = cz + 6
-    const bench = new THREE.BoxGeometry(0.5, 0.5, 1.8)
-    bench.translate(benchX, 0.5, benchZ)
-    this.addStatic(bench, benchMat)
-    for (const side of [-1, 1]) {
-      const rack = new THREE.BoxGeometry(0.15, 1.1, 0.15)
-      rack.translate(benchX, 0.55, benchZ + side * 0.8)
-      this.addStatic(rack, barMat)
+    const buildBench = (benchX: number, benchZ: number) => {
+      const bench = new THREE.BoxGeometry(0.5, 0.5, 1.8)
+      bench.translate(benchX, 0.5, benchZ)
+      this.addStatic(bench, benchMat)
+      for (const side of [-1, 1]) {
+        const rack = new THREE.BoxGeometry(0.15, 1.1, 0.15)
+        rack.translate(benchX, 0.55, benchZ + side * 0.8)
+        this.addStatic(rack, barMat)
+      }
+      const barbell = new THREE.CylinderGeometry(0.04, 0.04, 2.2, 8)
+      barbell.rotateZ(Math.PI / 2)
+      barbell.translate(benchX, 1.05, benchZ)
+      this.addStatic(barbell, barMat)
+      for (const side of [-1, 1]) {
+        const plate = new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12)
+        plate.rotateZ(Math.PI / 2)
+        plate.translate(benchX + side * 1.0, 1.05, benchZ)
+        this.addStatic(plate, barMat)
+      }
     }
-    const barbell = new THREE.CylinderGeometry(0.04, 0.04, 2.2, 8)
-    barbell.rotateZ(Math.PI / 2)
-    barbell.translate(benchX, 1.05, benchZ)
-    this.addStatic(barbell, barMat)
-    for (const side of [-1, 1]) {
-      const plate = new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12)
-      plate.rotateZ(Math.PI / 2)
-      plate.translate(benchX + side * 1.0, 1.05, benchZ)
-      this.addStatic(plate, barMat)
+    buildBench(cx - 8, cz + 6)
+    buildBench(cx + 8, cz + 6)
+
+    // ---- basketball court: painted asphalt patch, key lines, one hoop ----
+    const courtMat = new THREE.MeshLambertMaterial({ color: 0x2f3a42 })
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xe8e8d8 })
+    const hoopMat = new THREE.MeshPhongMaterial({ color: 0x8a8a8a, shininess: 70 })
+    const courtCx = cx - 6
+    const courtCz = cz - 6
+    const courtW = 9
+    const courtD = 5
+    this.addFlatMesh(courtCx, 0.02, courtCz, courtW, courtD, courtMat, -Math.PI / 2)
+    // border lines
+    for (const z of [courtCz - courtD / 2, courtCz + courtD / 2]) {
+      const line = new THREE.BoxGeometry(courtW, 0.02, 0.08)
+      line.translate(courtCx, 0.03, z)
+      this.addStatic(line, lineMat)
     }
+    for (const x of [courtCx - courtW / 2, courtCx + courtW / 2]) {
+      const line = new THREE.BoxGeometry(0.08, 0.02, courtD)
+      line.translate(x, 0.03, courtCz)
+      this.addStatic(line, lineMat)
+    }
+    // hoop at the north end of the court
+    const hoopX = courtCx
+    const hoopZ = courtCz - courtD / 2 - 0.3
+    const pole = new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8)
+    pole.translate(hoopX, 1.6, hoopZ)
+    this.addStatic(pole, hoopMat)
+    const backboard = new THREE.BoxGeometry(1.2, 0.8, 0.05)
+    backboard.translate(hoopX, 3.1, hoopZ + 0.15)
+    this.addStatic(backboard, lineMat)
+    const rim = new THREE.TorusGeometry(0.23, 0.02, 6, 16)
+    rim.rotateX(Math.PI / 2)
+    rim.translate(hoopX, 2.75, hoopZ + 0.4)
+    this.addStatic(rim, hoopMat)
+    this.playerColliders.push({
+      minX: hoopX - 0.15,
+      maxX: hoopX + 0.15,
+      minZ: hoopZ - 0.15,
+      maxZ: hoopZ + 0.15,
+      height: 3.2,
+    })
 
     // ---- guard towers on the outer edge, taller than the fence ----
     const towerSpots: Array<[number, number]> = [
