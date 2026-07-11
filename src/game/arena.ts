@@ -513,7 +513,7 @@ export class Arena {
       { name: 'SECURITY GATE', cost: 1250, x: 20, z: 0, axis: 'x', rooms: [0, 2] },
       { name: 'ARMORY GATE', cost: 2000, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
       { name: 'ARMORY GATE', cost: 2000, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
-      { name: 'THE LAB', cost: 10000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
+      { name: 'THE LAB', cost: 1000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
     ]
     defs.forEach((d, id) => {
       const group = new THREE.Group()
