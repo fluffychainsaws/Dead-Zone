@@ -718,6 +718,7 @@ export class Arena {
     // ---- the central dome: a ring wall with a south-facing entrance ----
     const domeSegs = 22
     const entranceGap = Math.PI / 2 // south (+z) side stays open
+    this.registerRingObstacle(DOME_CX, DOME_CZ, DOME_R, entranceGap)
     for (let i = 0; i < domeSegs; i++) {
       const a = (i / domeSegs) * Math.PI * 2
       if (Math.abs(this.angleDelta(a, entranceGap)) < 0.42) continue // leave the doorway
@@ -1141,25 +1142,39 @@ export class Arena {
     return best
   }
 
-  /** True if a point sits inside the dome's ring wall (with a little slack so
-   *  zombies don't dither right at the boundary). */
-  private insideDome(x: number, z: number): boolean {
-    return Math.hypot(x - DOME_CX, z - DOME_CZ) < DOME_R - 0.8
+  /** Any fully-enclosing, zombie-blocking ring with a single gap — the room
+   *  graph has no idea these exist, so without this a zombie on one side and
+   *  its target on the other just pushes straight against the wall instead of
+   *  routing around to the gap. Register one of these for any future
+   *  obstacle shaped like this instead of special-casing it. */
+  private ringObstacles: Array<{
+    cx: number
+    cz: number
+    radius: number
+    gapOutside: THREE.Vector3
+    gapInside: THREE.Vector3
+  }> = []
+
+  private registerRingObstacle(cx: number, cz: number, radius: number, gapAngle: number) {
+    const gx = Math.cos(gapAngle)
+    const gz = Math.sin(gapAngle)
+    this.ringObstacles.push({
+      cx,
+      cz,
+      radius,
+      gapOutside: new THREE.Vector3(cx + gx * (radius + 1.6), 0, cz + gz * (radius + 1.6)),
+      gapInside: new THREE.Vector3(cx + gx * (radius - 1.6), 0, cz + gz * (radius - 1.6)),
+    })
   }
 
   nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
-    // the dome ring is a solid obstacle with a single south-facing gap, sitting
-    // entirely inside one room — the room graph below has no idea it exists, so
-    // a zombie on one side and the player on the other would otherwise just
-    // push straight against the glass instead of routing around to the gap
-    const posInDome = this.insideDome(pos.x, pos.z)
-    const targetInDome = this.insideDome(target.x, target.z)
-    if (posInDome !== targetInDome) {
-      const gapOutside = new THREE.Vector3(DOME_CX, 0, DOME_CZ + DOME_R + 1.6)
-      const gapInside = new THREE.Vector3(DOME_CX, 0, DOME_CZ + DOME_R - 1.6)
-      const towardGap = posInDome ? gapInside : gapOutside
+    for (const ring of this.ringObstacles) {
+      const posIn = Math.hypot(pos.x - ring.cx, pos.z - ring.cz) < ring.radius - 0.8
+      const targetIn = Math.hypot(target.x - ring.cx, target.z - ring.cz) < ring.radius - 0.8
+      if (posIn === targetIn) continue
+      const towardGap = posIn ? ring.gapInside : ring.gapOutside
       const dist = Math.hypot(pos.x - towardGap.x, pos.z - towardGap.z)
-      return dist > 1.2 ? towardGap : posInDome ? gapOutside : gapInside
+      return dist > 1.2 ? towardGap : posIn ? ring.gapOutside : ring.gapInside
     }
 
     const ra = this.roomOf(pos.x, pos.z)
