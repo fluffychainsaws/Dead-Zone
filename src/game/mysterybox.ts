@@ -159,22 +159,28 @@ export class MysteryBox {
     header.position.y = 2.11
     this.group.add(header)
 
-    // carnival marquee bulbs along both sides of the header, twinkling in update()
+    // carnival marquee bulbs wrapping all the way around the header, twinkling
+    // in update() — trace the full rectangular perimeter, not just the sides
     const bulbColors = [0xff3030, 0xffd020, 0x30a0ff, 0x30e050]
     const bulbGeo = new THREE.SphereGeometry(0.035, 8, 8)
-    let bulbI = 0
-    for (const side of [-1, 1]) {
-      for (let z = -0.6; z <= 0.6; z += 0.24) {
-        const color = bulbColors[bulbI++ % bulbColors.length]
-        const bulb = new THREE.Mesh(
-          bulbGeo,
-          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }),
-        )
-        bulb.position.set(side * 0.87, 2.11, z)
-        this.group.add(bulb)
-        this.marqueeLights.push(bulb)
-      }
-    }
+    const HW = 0.87 // just outside the header's x half-width (0.85)
+    const HD = 0.73 // just outside the header's z half-depth (0.7)
+    const STEP = 0.24
+    const perimeter: [number, number][] = []
+    for (let z = -0.6; z <= 0.6 + 1e-6; z += STEP) perimeter.push([-HW, z]) // left
+    for (let x = -0.75; x <= 0.75 + 1e-6; x += STEP) perimeter.push([x, HD]) // front
+    for (let z = 0.6; z >= -0.6 - 1e-6; z -= STEP) perimeter.push([HW, z]) // right
+    for (let x = 0.75; x >= -0.75 - 1e-6; x -= STEP) perimeter.push([x, -HD]) // back
+    perimeter.forEach(([x, z], i) => {
+      const color = bulbColors[i % bulbColors.length]
+      const bulb = new THREE.Mesh(
+        bulbGeo,
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }),
+      )
+      bulb.position.set(x, 2.11, z)
+      this.group.add(bulb)
+      this.marqueeLights.push(bulb)
+    })
 
     // rail the claw rides along
     const rail = new THREE.Mesh(
