@@ -32,7 +32,7 @@ type Facing = 'west' | 'east' | 'north' | 'south'
 // pos is the along-wall coordinate (x for north/south, z for east/west) — the
 // perpendicular coordinate snaps flush to whichever wall `facing` names.
 const STATIONS: Array<{ weapon: string; price: number; pos: number; facing: Facing }> = [
-  { weapon: 'garand', price: 600, pos: -6, facing: 'south' }, // cell block, by the cells
+  { weapon: 'garand', price: 600, pos: 4, facing: 'west' }, // cell block, near the entrance — the south-wall cells are sealed behind bars and unreachable
   { weapon: 'trench', price: 1200, pos: -6, facing: 'west' }, // showers
   { weapon: 'kurz', price: 1500, pos: -6, facing: 'east' }, // warden's wing
   { weapon: 'magnum', price: 1800, pos: -18, facing: 'east' }, // warden's wing, right by the yard door
