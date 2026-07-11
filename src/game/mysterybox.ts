@@ -31,13 +31,19 @@ const PHASE_TIME: Record<Phase, number> = {
 }
 
 const RAIL_Y = 1.85
-const PILE_X = -0.45
 const PILE_Y = 0.58
 const CHUTE_X = 0.5
 const CHUTE_DROP_Y = 1.05
 const TRAY_POS = new THREE.Vector3(0.5, 0.42, 0.95) // outside the cabinet, reachable without opening it
 const TINY_SCALE = 0.22 // pile/carried size
 const TROPHY_SCALE = 0.85 // "regular size" once it's popped out into the tray
+
+// full play envelope the claw's gantry can reach — the whole cabinet floor,
+// not just a narrow strip down the middle
+const PLAY_X_MIN = -0.68
+const PLAY_X_MAX = 0.6
+const PLAY_Z_MIN = -0.48
+const PLAY_Z_MAX = 0.48
 
 function smoothstep(t: number): number {
   return t * t * (3 - 2 * t)
@@ -85,6 +91,7 @@ export class MysteryBox {
   private group = new THREE.Group()
   private claw = new THREE.Group()
   private cable: THREE.Mesh
+  private crossbar: THREE.Mesh
   private prongs: THREE.Mesh[] = []
   private pile: PrizeBox[] = []
   private grabbedPile: PrizeBox | null = null
@@ -182,49 +189,49 @@ export class MysteryBox {
       this.marqueeLights.push(bulb)
     })
 
-    // rail the claw rides along
-    const rail = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.035, 0.035, 1.5, 8),
+    // full X-Y gantry: two fixed rails run along Z on either side, and a
+    // crossbar spanning X slides along them — the claw hangs from a point that
+    // slides along the crossbar. Together they can reach the whole cabinet floor.
+    const railSpan = new THREE.CylinderGeometry(0.03, 0.03, PLAY_Z_MAX - PLAY_Z_MIN + 0.3, 8)
+    for (const x of [PLAY_X_MIN - 0.06, PLAY_X_MAX + 0.06]) {
+      const sideRail = new THREE.Mesh(railSpan, postMat)
+      sideRail.rotation.x = Math.PI / 2
+      sideRail.position.set(x, RAIL_Y + 0.14, 0)
+      this.group.add(sideRail)
+    }
+    this.crossbar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.035, PLAY_X_MAX - PLAY_X_MIN + 0.3, 8),
       postMat,
     )
-    rail.rotation.z = Math.PI / 2
-    rail.position.set(0, RAIL_Y + 0.12, 0)
-    this.group.add(rail)
+    this.crossbar.rotation.z = Math.PI / 2
+    this.group.add(this.crossbar)
 
-    // the pile of prize guns, sitting on the cabinet floor — a full, heaped pile.
-    // shuffled once so the pile shows a varied mix rather than list order.
+    // the pile of prize guns, spread across the full cabinet floor rather than
+    // huddled in one corner — shuffled so the mix is varied, not list order
     const shuffled = [...BOX_WEAPONS].sort(() => Math.random() - 0.5)
+    const cols = 5
+    const rows = 4
     let wi = 0
-    for (const [x, z, y] of [
-      [-0.55, -0.3],
-      [-0.3, 0.1],
-      [-0.55, 0.35],
-      [-0.15, -0.35],
-      [-0.65, 0.05],
-      [-0.25, 0.4],
-      [-0.7, -0.15],
-      [-0.4, -0.15],
-      [-0.7, 0.3],
-      [-0.35, -0.42],
-      [-0.15, 0.15],
-      [-0.6, -0.45],
-      [0.0, -0.1],
-      [0.02, 0.25],
-      [-0.5, 0.15, 0.78], // stacked on top for a heaped look
-      [-0.28, -0.1, 0.78],
-      [-0.6, 0.15, 0.78],
-    ]) {
-      const weapon = shuffled[wi++ % shuffled.length]
-      const prize = buildTrophyGun(weapon.id, TINY_SCALE)
-      prize.position.set(x, y ?? PILE_Y, z)
-      // tumbled, not robotically upright — it's a heap of tiny guns
-      prize.rotation.set(
-        (Math.random() - 0.5) * 1.4,
-        Math.random() * Math.PI * 2,
-        (Math.random() - 0.5) * 1.4,
-      )
-      this.group.add(prize)
-      this.pile.push({ group: prize, homeX: x, homeZ: z, weapon })
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (wi >= 17) break
+        const x =
+          PLAY_X_MIN + (c / (cols - 1)) * (PLAY_X_MAX - PLAY_X_MIN) + (Math.random() - 0.5) * 0.09
+        const z =
+          PLAY_Z_MIN + (r / (rows - 1)) * (PLAY_Z_MAX - PLAY_Z_MIN) + (Math.random() - 0.5) * 0.09
+        const y = Math.random() < 0.2 ? PILE_Y + 0.35 : PILE_Y // a few stacked for a heaped look
+        const weapon = shuffled[wi++ % shuffled.length]
+        const prize = buildTrophyGun(weapon.id, TINY_SCALE)
+        prize.position.set(x, y, z)
+        // tumbled, not robotically upright — it's a heap of tiny guns
+        prize.rotation.set(
+          (Math.random() - 0.5) * 1.4,
+          Math.random() * Math.PI * 2,
+          (Math.random() - 0.5) * 1.4,
+        )
+        this.group.add(prize)
+        this.pile.push({ group: prize, homeX: x, homeZ: z, weapon })
+      }
     }
 
     // claw head: housing + three prongs
@@ -241,7 +248,7 @@ export class MysteryBox {
       this.claw.add(pivot)
       this.prongs.push(prong)
     }
-    this.claw.position.set(PILE_X, RAIL_Y, 0)
+    this.claw.position.set(0, RAIL_Y, 0)
     this.group.add(this.claw)
 
     this.cable = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 6), postMat)
@@ -313,6 +320,9 @@ export class MysteryBox {
     const len = Math.max(0.02, top - bottom)
     this.cable.scale.y = len
     this.cable.position.set(this.claw.position.x, bottom + len / 2, this.claw.position.z)
+    // the crossbar always sits directly above the claw's current Z, spanning X —
+    // it's what the claw's trolley "slides along" to reach that Z
+    this.crossbar.position.set(0, RAIL_Y + 0.14, this.claw.position.z)
   }
 
   private setProngs(openAmount: number) {
@@ -398,8 +408,10 @@ export class MysteryBox {
 
     switch (this.phase) {
       case 'toPile':
-        this.claw.position.x = e * PILE_X
-        this.claw.position.z = 0
+        // travels from home (0,0) to wherever the chosen gun actually sits —
+        // the gantry uses its whole range, not a fixed spot
+        this.claw.position.x = this.grabbedPile ? e * this.grabbedPile.homeX : 0
+        this.claw.position.z = this.grabbedPile ? e * this.grabbedPile.homeZ : 0
         this.claw.position.y = RAIL_Y
         if (this.phaseT % 0.15 < dt) this.onTick?.()
         break
@@ -428,9 +440,13 @@ export class MysteryBox {
       case 'ascend':
         this.claw.position.y = (PILE_Y + 0.14) + (RAIL_Y - (PILE_Y + 0.14)) * e
         break
-      case 'toChute':
-        this.claw.position.x = PILE_X + (CHUTE_X - PILE_X) * e
+      case 'toChute': {
+        const fromX = this.grabbedPile?.homeX ?? 0
+        const fromZ = this.grabbedPile?.homeZ ?? 0
+        this.claw.position.x = fromX + (CHUTE_X - fromX) * e
+        this.claw.position.z = fromZ + (0 - fromZ) * e
         break
+      }
       case 'release':
         this.claw.position.y = RAIL_Y + (CHUTE_DROP_Y - RAIL_Y) * e
         this.setProngs(e)
@@ -475,7 +491,7 @@ export class MysteryBox {
         if (this.grabbedPile) this.grabbedPile.group.visible = true // restock the pile
         this.grabbedPile = null
         this.setProngs(1)
-        this.claw.position.set(PILE_X, RAIL_Y, 0)
+        this.claw.position.set(0, RAIL_Y, 0)
         this.updateCable()
         this.onReveal?.()
         this.state = 'ready'
