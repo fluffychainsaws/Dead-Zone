@@ -105,9 +105,9 @@ export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 // be, plus a short connecting corridor since the yard sits clear of the
 // building to avoid overlapping The Lab's own footprint to the north.
 const COURT_X0 = 40
-const COURT_X1 = COURT_X0 + (LAB_X1 - LAB_X0) // same width as The Lab
+const COURT_X1 = COURT_X0 + (LAB_X1 - LAB_X0) / 2 // half The Lab's width
 const COURT_Z0 = -35
-const COURT_Z1 = COURT_Z0 + 48 // same depth as The Lab
+const COURT_Z1 = COURT_Z0 + 24 // half The Lab's depth
 const COURT_FENCE_H = 3.2
 const TOWER_H = 6.5 // taller than the fence
 const TOWER_R = 2.2
@@ -153,13 +153,8 @@ export class Arena {
     side: THREE.DoubleSide,
   })
   private grassMat = new THREE.MeshLambertMaterial({ color: 0x1e3a1a })
-  private fenceMat = new THREE.MeshPhongMaterial({
-    color: 0x6a7570,
-    transparent: true,
-    opacity: 0.4,
-    shininess: 30,
-    side: THREE.DoubleSide,
-  })
+  private fenceMat = new THREE.MeshPhongMaterial({ color: 0x53585a, shininess: 65 })
+  private barbWireMat = new THREE.MeshPhongMaterial({ color: 0x1c1a16, shininess: 85 })
   private towerMat = new THREE.MeshLambertMaterial({ color: 0x2b2f28 })
   private doorMat = new THREE.MeshPhongMaterial({ color: 0x342820, shininess: 25 })
   // static geometry buckets, merged into one mesh per material after build
@@ -939,10 +934,11 @@ export class Arena {
   }
 
   /** The Prison Yard — an open-air courtyard where prisoners were let out.
-   *  Grass underfoot, a chain-link perimeter fence with its own breach gaps for
-   *  the horde, a battered weight bench, and two guard towers whose
-   *  searchlights only come on once activated (a straight cost, not a real
-   *  climb — see the Tower doc comment). */
+   *  Grass underfoot, a solid steel-bar-and-barbed-wire perimeter fence (no
+   *  walk-through gaps — the horde gets in by climbing the fence or crawling
+   *  straight up out of the ground), a battered weight bench, and two guard
+   *  towers whose searchlights only come on once activated (a straight cost,
+   *  not a real climb — see the Tower doc comment). */
   private buildCourtyard() {
     const cx = (COURT_X0 + COURT_X1) / 2
     const cz = (COURT_Z0 + COURT_Z1) / 2
@@ -968,59 +964,125 @@ export class Arena {
     // ---- grass ground, its own patch since it sits outside the base map ----
     this.addFlatMesh(cx, 0.015, cz, w, d, this.grassMat, -Math.PI / 2)
 
-    // ---- perimeter fence: see-through chain-link. Solid on the north side;
-    // the west side has a gap matching the corridor (the player's own way in,
-    // not a zombie spawn); east and south each get a breach gap the horde
-    // pours through, registered just like any other opening. ----
+    // ---- perimeter fence: steel bar posts, three horizontal rails, and a
+    // barbed-wire strand along the top. Solid all the way around — the only
+    // true break is the west side matching the player's own corridor door.
+    // The horde never gets a walk-through gap; instead one spot on the east
+    // fence is "climbable" (the fence stands and blocks the player same as
+    // anywhere else, but zombies pass through it there — no climbing animation
+    // exists, so this is the same trick as a spawn tunnel, just re-skinned),
+    // and a separate manhole inside the yard lets zombies crawl straight up
+    // out of the ground without crossing the fence line at all. ----
+    const buildFenceRun = (isX: boolean, fixed: number, from: number, to: number) => {
+      const len = to - from
+      if (len < 0.1) return
+      const postSpacing = 0.5
+      const postCount = Math.max(2, Math.round(len / postSpacing))
+      for (let i = 0; i <= postCount; i++) {
+        const t = from + (len * i) / postCount
+        const post = new THREE.CylinderGeometry(0.045, 0.045, COURT_FENCE_H, 6)
+        post.translate(isX ? t : fixed, COURT_FENCE_H / 2, isX ? fixed : t)
+        this.addStatic(post, this.fenceMat)
+      }
+      for (const y of [0.12, COURT_FENCE_H * 0.5, COURT_FENCE_H - 0.15]) {
+        const rail = new THREE.BoxGeometry(isX ? len : 0.09, 0.09, isX ? 0.09 : len)
+        rail.translate(isX ? (from + to) / 2 : fixed, y, isX ? fixed : (from + to) / 2)
+        this.addStatic(rail, this.fenceMat)
+      }
+      // barbed wire: a taut strand along the very top plus short angled barbs
+      const wireY = COURT_FENCE_H + 0.1
+      const wire = new THREE.CylinderGeometry(0.025, 0.025, len, 6)
+      wire.rotateX(isX ? 0 : Math.PI / 2)
+      wire.rotateZ(isX ? Math.PI / 2 : 0)
+      wire.translate(isX ? (from + to) / 2 : fixed, wireY, isX ? fixed : (from + to) / 2)
+      this.addStatic(wire, this.barbWireMat)
+      const barbSpacing = 0.5
+      const barbCount = Math.max(2, Math.round(len / barbSpacing))
+      for (let i = 0; i <= barbCount; i++) {
+        const t = from + (len * i) / barbCount
+        const ang = i % 2 === 0 ? 0.7 : -0.7
+        const barb = new THREE.CylinderGeometry(0.014, 0.014, 0.22, 4)
+        barb.rotateZ(Math.PI / 2 + ang)
+        barb.translate(isX ? t : fixed, wireY + 0.05, isX ? fixed : t)
+        this.addStatic(barb, this.barbWireMat)
+      }
+    }
     const buildFenceSide = (
       isX: boolean, // true = runs along X (north/south walls), false = along Z (east/west walls)
       fixed: number,
       from: number,
       to: number,
-      gapAt: number | null,
-      gapHalf = 2.4,
+      trueGap: { at: number; half: number } | null = null, // real opening, e.g. the corridor door
+      climbGap: { at: number; half: number } | null = null, // fence stands, but zombies pass through here
     ) => {
       const ranges: Array<[number, number]> = []
-      if (gapAt === null) ranges.push([from, to])
+      if (trueGap === null) ranges.push([from, to])
       else {
-        if (gapAt - gapHalf > from) ranges.push([from, gapAt - gapHalf])
-        if (gapAt + gapHalf < to) ranges.push([gapAt + gapHalf, to])
+        if (trueGap.at - trueGap.half > from) ranges.push([from, trueGap.at - trueGap.half])
+        if (trueGap.at + trueGap.half < to) ranges.push([trueGap.at + trueGap.half, to])
       }
       for (const [a, b] of ranges) {
         if (b - a < 0.1) continue
-        const mid = (a + b) / 2
-        const len = b - a
-        const geo = new THREE.BoxGeometry(isX ? len : 0.12, COURT_FENCE_H, isX ? 0.12 : len)
-        geo.translate(isX ? mid : fixed, COURT_FENCE_H / 2, isX ? fixed : mid)
-        this.addStatic(geo, this.fenceMat)
-        const c: Collider = {
+        buildFenceRun(isX, fixed, a, b)
+        this.playerColliders.push({
           minX: isX ? a : fixed - 0.12,
           maxX: isX ? b : fixed + 0.12,
           minZ: isX ? fixed - 0.12 : a,
           maxZ: isX ? fixed + 0.12 : b,
           height: COURT_FENCE_H,
+        })
+        const zRanges: Array<[number, number]> = []
+        if (climbGap === null) zRanges.push([a, b])
+        else {
+          if (climbGap.at - climbGap.half > a) zRanges.push([a, Math.min(b, climbGap.at - climbGap.half)])
+          if (climbGap.at + climbGap.half < b) zRanges.push([Math.max(a, climbGap.at + climbGap.half), b])
         }
-        this.playerColliders.push(c)
-        this.zombieColliders.push(c)
+        for (const [za, zb] of zRanges) {
+          if (zb - za < 0.1) continue
+          this.zombieColliders.push({
+            minX: isX ? za : fixed - 0.12,
+            maxX: isX ? zb : fixed + 0.12,
+            minZ: isX ? fixed - 0.12 : za,
+            maxZ: isX ? fixed + 0.12 : zb,
+            height: COURT_FENCE_H,
+          })
+        }
       }
     }
-    buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1, null) // north — solid
-    buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, cz) // east — horde breach
-    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1, cx) // south — horde breach
-    buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, -11, GATE_W / 2 + 0.2) // west — corridor gap
+    buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
+    buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, { at: cz, half: 2.0 }) // east — climb spot
+    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1) // south — solid
+    buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
 
-    // zombie spawn points at the two breach gaps, same pattern as every other opening
+    // zombies climb the fence here — it visibly stands (and still blocks the
+    // player) but the zombie collider is gapped at exactly this spot
     this.openings.push({
       roomId: 5,
-      outside: new THREE.Vector3(COURT_X1 + 2.5, 0, cz),
-      inside: new THREE.Vector3(COURT_X1 - 2.5, 0, cz),
-      zone: { minX: COURT_X1 - 3.5, maxX: COURT_X1 + 3.5, minZ: cz - 3, maxZ: cz + 3 },
+      outside: new THREE.Vector3(COURT_X1 + 2.0, 0, cz),
+      inside: new THREE.Vector3(COURT_X1 - 2.0, 0, cz),
+      zone: { minX: COURT_X1 - 3, maxX: COURT_X1 + 3, minZ: cz - 2.5, maxZ: cz + 2.5 },
     })
+
+    // a manhole zombies crawl straight up out of, already inside the fence line
+    const manholeX = cx + w * 0.22
+    const manholeZ = cz - d * 0.22
+    const manholePos = new THREE.Vector3(manholeX, 0, manholeZ)
+    const manholeRing = new THREE.CylinderGeometry(0.75, 0.8, 0.12, 16)
+    manholeRing.translate(manholeX, 0.06, manholeZ)
+    this.addStatic(manholeRing, this.towerMat)
+    const manholeHole = new THREE.CylinderGeometry(0.55, 0.55, 0.14, 16)
+    manholeHole.translate(manholeX, 0.05, manholeZ)
+    this.addStatic(manholeHole, new THREE.MeshBasicMaterial({ color: 0x000000 }))
     this.openings.push({
       roomId: 5,
-      outside: new THREE.Vector3(cx, 0, COURT_Z1 + 2.5),
-      inside: new THREE.Vector3(cx, 0, COURT_Z1 - 2.5),
-      zone: { minX: cx - 3, maxX: cx + 3, minZ: COURT_Z1 - 3.5, maxZ: COURT_Z1 + 3.5 },
+      outside: manholePos,
+      inside: manholePos,
+      zone: {
+        minX: manholeX - 1.5,
+        maxX: manholeX + 1.5,
+        minZ: manholeZ - 1.5,
+        maxZ: manholeZ + 1.5,
+      },
     })
 
     // ---- a battered weight bench, just something for the eye to land on ----
