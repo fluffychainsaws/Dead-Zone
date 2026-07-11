@@ -55,6 +55,7 @@ export class Game {
   private waves: WaveSystem
   private economy = new Economy()
   private groanTimer = 2
+  private windowDamageTimer = 0.5
   private clock = new THREE.Clock()
   private mode: Mode = 'menu'
 
@@ -249,6 +250,7 @@ export class Game {
       this.ensureAvatar(from).applyState(s)
     })
     this.net.onDoor((id) => this.openDoorEverywhere(id))
+    this.net.onWindowRepair((id) => this.repairWindowEverywhere(id))
     this.net.onShot((shot, from) => {
       // trust the peer's hit — co-op, host applies authoritative damage
       this.effects.tracer(
@@ -591,6 +593,9 @@ export class Game {
     for (const id of s.d ?? []) {
       if (!this.arena.doors[id]?.open) this.openDoorEverywhere(id, false)
     }
+    for (const [id, boards] of (s.wb ?? []).entries()) {
+      this.arena.setWindowBoards(id, boards)
+    }
     this.remoteZombies.applyState(s.z)
     const myLatch = (s.mg ?? []).find(([, targetId]) => targetId === selfId)
     this.myLatchClientZid = myLatch ? myLatch[0] : null
@@ -704,6 +709,29 @@ export class Game {
     audio.groan(Math.sin(angle), Math.max(0, 1 - dist / 30), source.runner)
   }
 
+  /** Host/solo-authoritative: any zombie lingering at a boarded window chips
+   *  away at it until it breaks through — clients just mirror the resulting
+   *  board counts from the host's state broadcast instead of computing this. */
+  private updateWindowDamage(dt: number) {
+    if (this.netMode === 'client') return
+    this.windowDamageTimer -= dt
+    if (this.windowDamageTimer > 0) return
+    this.windowDamageTimer = 0.5
+    if (this.arena.windows.length === 0) return
+    const alive = this.horde.zombies.filter((z) => z.alive)
+    for (const win of this.arena.windows) {
+      if (win.boards <= 0) continue
+      const near = alive.some(
+        (z) => Math.hypot(z.group.position.x - win.pos.x, z.group.position.z - win.pos.z) < 1.8,
+      )
+      if (near) {
+        const wasLastBoard = win.boards === 1
+        this.arena.damageWindowBoard(win.id)
+        if (wasLastBoard) audio.deny() // last board — distinct crash cue
+      }
+    }
+  }
+
   /** Revive prompt takes priority over wall-buys. Returns true if it owned the prompt. */
   private handleRevive(): boolean {
     if (this.netMode === 'solo' || this.player.downed) return false
@@ -722,6 +750,25 @@ export class Game {
       }
     }
     return false
+  }
+
+  /** Hammer a damaged window's boards back up. Returns true if it owned the prompt. */
+  private handleWindowRepair(): boolean {
+    const win = this.arena.nearestDamagedWindow(this.player.pos)
+    if (!win) return false
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    this.hud.setPrompt(`${key} REPAIR BOARDS (${win.boards}/${win.maxBoards})`)
+    if (this.input.consumeInteract()) {
+      this.repairWindowEverywhere(win.id)
+      this.earn(POINTS.repair)
+    }
+    return true
+  }
+
+  private repairWindowEverywhere(id: number, broadcast = true) {
+    this.arena.repairWindowBoard(id)
+    audio.purchase()
+    if (broadcast && this.netMode === 'client') this.net?.sendWindowRepair(id)
   }
 
   /** Buy open a locked gate. Returns true if it owned the prompt. */
@@ -875,6 +922,7 @@ export class Game {
     if (this.handleRevive()) return
     if (this.handleLightBuys()) return
     if (this.handleDoors()) return
+    if (this.handleWindowRepair()) return
     if (this.handleMysteryBox()) return
     const station = this.economy.nearestStation(this.player.pos)
     if (!station) {
@@ -997,6 +1045,7 @@ export class Game {
       d: this.arena.openDoorIds(),
       mg: latches,
       gr: grabs,
+      wb: this.arena.windows.map((w) => w.boards),
     }
     this.net.sendState(state)
   }
@@ -1301,6 +1350,7 @@ export class Game {
 
       for (const avatar of this.remotePlayers.values()) avatar.update(dt)
       this.updateGroans(dt)
+      this.updateWindowDamage(dt)
       this.netSend()
       this.handleZeroHp()
 

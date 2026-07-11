@@ -54,6 +54,19 @@ export interface Opening {
   zone: Collider // vault-hop zone straddling the wall
 }
 
+/** A boarded-up window — CoD-Zombies style: zombies knock boards down over
+ *  time to get through, players can hammer them back up. Players can never
+ *  climb out through it regardless of board state (see the full-height
+ *  collider in playerColliders) — only the zombie-facing collider toggles. */
+export interface WindowBarrier {
+  id: number
+  pos: THREE.Vector3
+  boards: number
+  maxBoards: number
+  plankMeshes: THREE.Mesh[]
+  zombieCollider: Collider
+}
+
 const X0 = -30
 const X1 = 30
 const Z0 = -22
@@ -89,6 +102,7 @@ export class Arena {
   ]
   doors: Door[] = []
   openings: Opening[] = []
+  windows: WindowBarrier[] = []
 
   // exposed so the Game can plunge The Lab into darkness for the local player
   ambient!: THREE.AmbientLight
@@ -312,35 +326,33 @@ export class Arena {
     roomId: number,
     kind: 'window' | 'breach',
   ) {
-    // player-only blocker filling the gap (zombies pass through it)
     const isX = axis === 'x'
     const w = isX ? WIN_W : T
     const d = isX ? T : WIN_W
     const cx = isX ? at : fixed
     const cz = isX ? fixed : at
-    // a low sill players can vault with a jump — zombies crawl straight through
-    const blocker: Collider = {
-      minX: cx - w / 2,
-      maxX: cx + w / 2,
-      minZ: cz - d / 2,
-      maxZ: cz + d / 2,
-      height: kind === 'window' ? 1.0 : 0.6,
-    }
-    this.playerColliders.push(blocker)
+    const footprint = { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 }
 
     if (kind === 'window') {
-      // waist-high boarded sill — jump to vault it
+      // full-height invisible wall — players can never climb out through a
+      // window no matter how battered the boards get; only zombies ever get
+      // through, and only by breaking the boards down first
+      this.playerColliders.push({ ...footprint, height: H + 1 })
+      const zombieCollider: Collider = { ...footprint, height: H + 1 }
+      this.zombieColliders.push(zombieCollider)
+
+      // individual, non-merged planks — need to be independently knocked down
+      // and hammered back up, unlike the rest of the static geometry
+      const plankMeshes: THREE.Mesh[] = []
       for (const y of [0.35, 0.75]) {
-        const plank = new THREE.BoxGeometry(
-          isX ? WIN_W : T * 0.5,
-          0.18,
-          isX ? T * 0.5 : WIN_W,
-        )
-        plank.rotateY((Math.random() - 0.5) * 0.08)
-        plank.translate(cx, y, cz)
-        this.addStatic(plank, this.plankMat)
+        const geo = new THREE.BoxGeometry(isX ? WIN_W : T * 0.5, 0.18, isX ? T * 0.5 : WIN_W)
+        const mesh = new THREE.Mesh(geo, this.plankMat)
+        mesh.position.set(cx, y, cz)
+        mesh.rotation.y = (Math.random() - 0.5) * 0.08
+        this.scene.add(mesh)
+        plankMeshes.push(mesh)
       }
-      // shattered frame stubs above — high enough to vault under
+      // shattered frame stubs above — always present, never destroyed
       const lintel = new THREE.BoxGeometry(
         isX ? WIN_W + 0.4 : T,
         H - 3.1,
@@ -348,8 +360,19 @@ export class Arena {
       )
       lintel.translate(cx, 3.1 + (H - 3.1) / 2, cz)
       this.addStatic(lintel, this.wallMat)
+
+      this.windows.push({
+        id: this.windows.length,
+        pos: new THREE.Vector3(cx, 0, cz),
+        boards: plankMeshes.length,
+        maxBoards: plankMeshes.length,
+        plankMeshes,
+        zombieCollider,
+      })
     } else {
-      // breach: pile of rubble at the base of a collapsed wall section
+      // breach: a low sill players can vault, zombies crawl straight through —
+      // already-broken openings have nothing left to board up
+      this.playerColliders.push({ ...footprint, height: 0.6 })
       const rubble = new THREE.BoxGeometry(
         isX ? WIN_W + 0.3 : T + 0.5,
         0.55,
@@ -374,16 +397,62 @@ export class Arena {
       outside,
       inside,
       zone: {
-        minX: blocker.minX - 1,
-        maxX: blocker.maxX + 1,
-        minZ: blocker.minZ - 1,
-        maxZ: blocker.maxZ + 1,
+        minX: footprint.minX - 1,
+        maxX: footprint.maxX + 1,
+        minZ: footprint.minZ - 1,
+        maxZ: footprint.maxZ + 1,
       },
     })
     // danger marker — emissive sprite, not a real light
     const glow = glowSprite(GLOW_RED, 2.4, 0.5)
     glow.position.set(cx, 1.5, cz)
     this.scene.add(glow)
+  }
+
+  nearestDamagedWindow(pos: THREE.Vector3, maxDist = 2.6): WindowBarrier | null {
+    let best: WindowBarrier | null = null
+    let bestD = maxDist
+    for (const w of this.windows) {
+      if (w.boards >= w.maxBoards) continue
+      const dist = Math.hypot(pos.x - w.pos.x, pos.z - w.pos.z)
+      if (dist < bestD) {
+        bestD = dist
+        best = w
+      }
+    }
+    return best
+  }
+
+  private applyWindowBoards(w: WindowBarrier, boards: number) {
+    const clamped = Math.max(0, Math.min(w.maxBoards, boards))
+    if (clamped === w.boards) return
+    const wasOpen = w.boards === 0
+    w.boards = clamped
+    for (let i = 0; i < w.maxBoards; i++) w.plankMeshes[i].visible = i < clamped
+    const nowOpen = clamped === 0
+    if (wasOpen !== nowOpen) {
+      const idx = this.zombieColliders.indexOf(w.zombieCollider)
+      if (nowOpen && idx >= 0) this.zombieColliders.splice(idx, 1)
+      else if (!nowOpen && idx < 0) this.zombieColliders.push(w.zombieCollider)
+    }
+  }
+
+  /** Hammers one board back up — call from the repair interaction. */
+  repairWindowBoard(id: number) {
+    const w = this.windows[id]
+    if (w) this.applyWindowBoards(w, w.boards + 1)
+  }
+
+  /** Knocks one board loose — call from the zombie-damage tick. */
+  damageWindowBoard(id: number) {
+    const w = this.windows[id]
+    if (w) this.applyWindowBoards(w, w.boards - 1)
+  }
+
+  /** Client-side: snap straight to the host's authoritative board count. */
+  setWindowBoards(id: number, boards: number) {
+    const w = this.windows[id]
+    if (w) this.applyWindowBoards(w, boards)
   }
 
   private inwardSign(axis: 'x' | 'z', fixed: number): number {

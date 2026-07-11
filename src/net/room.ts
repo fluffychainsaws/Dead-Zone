@@ -41,6 +41,7 @@ export type GameState = {
   d: number[] // opened door ids
   mg: MidgetLatch[]
   gr: GrabInfo[]
+  wb: number[] // board count remaining per window, indexed by window id
 }
 
 export type ShotMsg = {
@@ -96,6 +97,7 @@ export class NetRoom {
   private revive
   private over
   private door
+  private windowRepair
   private fx
   private melee
   private pry
@@ -111,6 +113,7 @@ export class NetRoom {
     this.revive = this.room.makeAction<string>('revive')
     this.over = this.room.makeAction<null>('over')
     this.door = this.room.makeAction<number>('door')
+    this.windowRepair = this.room.makeAction<number>('winfix')
     this.fx = this.room.makeAction<ShotFxMsg>('fx')
     this.melee = this.room.makeAction<MeleeMsg>('melee')
     this.pry = this.room.makeAction<PryMsg>('pry')
@@ -142,6 +145,13 @@ export class NetRoom {
   }
   onDoor(cb: (id: number, from: string) => void) {
     this.door.onMessage = (id, ctx) => cb(id, ctx.peerId)
+  }
+
+  sendWindowRepair(id: number) {
+    void this.windowRepair.send(id)
+  }
+  onWindowRepair(cb: (id: number, from: string) => void) {
+    this.windowRepair.onMessage = (id, ctx) => cb(id, ctx.peerId)
   }
 
   sendState(s: GameState) {
