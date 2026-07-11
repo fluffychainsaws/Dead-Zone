@@ -239,19 +239,34 @@ export class Player {
   collideWithBodies(bodies: THREE.Vector3[], bodyRadius: number, colliders: Collider[]) {
     if (!this.alive || this.pos.y > 1.2) return // airborne over their heads
     const minDist = RADIUS + bodyRadius
-    let pushed = false
+    // accumulate one combined push instead of applying+resolving per body —
+    // mutating this.pos mid-loop let each nearby zombie add up to a full
+    // minDist shove against the ORIGINAL position, so a dense crowd (e.g.
+    // surrounding a player stuck fighting off a latched midget) could sum to
+    // a multi-unit jump in a single frame, occasionally tunneling clean
+    // through a boundary wall instead of just being resolved against it
+    let sumX = 0
+    let sumZ = 0
     for (const b of bodies) {
       const dx = this.pos.x - b.x
       const dz = this.pos.z - b.z
       const d = Math.hypot(dx, dz)
       if (d > 0.001 && d < minDist) {
         const push = (minDist - d) / d
-        this.pos.x += dx * push
-        this.pos.z += dz * push
-        pushed = true
+        sumX += dx * push
+        sumZ += dz * push
       }
     }
-    if (pushed) {
+    const mag = Math.hypot(sumX, sumZ)
+    if (mag > 0.0001) {
+      // cap the combined shove to one body-width — still separates from the
+      // crowd every frame, just never in one giant unresolved leap
+      if (mag > minDist) {
+        sumX = (sumX / mag) * minDist
+        sumZ = (sumZ / mag) * minDist
+      }
+      this.pos.x += sumX
+      this.pos.z += sumZ
       this.resolve(colliders, 'x')
       this.resolve(colliders, 'z')
     }

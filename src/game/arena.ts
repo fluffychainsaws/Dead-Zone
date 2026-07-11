@@ -99,6 +99,7 @@ const STAIR_X = -26 // stairwell gate + corridor centre
 const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point sits
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
+export const VOID_POS = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
 
 // The Prison Yard — an open-air courtyard east of Warden's Wing, same footprint
 // as The Lab. Reached through a double door where the east-wall window used to
@@ -804,6 +805,26 @@ export class Arena {
     // bioluminescent blooms glow from within — rather than floating light blobs.
     const foliageMat = new THREE.MeshLambertMaterial({ color: 0x0a1410 })
     const trunkBase = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
+
+    // ---- the void: a basketball-size black hole the tree grows straight out
+    // of, like whatever's inside is leeching up through it ----
+    const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 })
+    const voidHole = new THREE.CylinderGeometry(0.13, 0.1, 0.06, 20)
+    voidHole.translate(DOME_CX, 0.02, DOME_CZ)
+    this.addStatic(voidHole, voidMat)
+    const voidRimMat = new THREE.MeshPhongMaterial({ color: 0x2a0f38, emissive: 0x4a1a5e, shininess: 40 })
+    const voidRim = new THREE.TorusGeometry(0.16, 0.025, 8, 24)
+    voidRim.rotateX(Math.PI / 2)
+    voidRim.translate(DOME_CX, 0.03, DOME_CZ)
+    this.addStatic(voidRim, voidRimMat)
+    // a soft dark stain bleeding out across the ground around it
+    const stain = new THREE.CircleGeometry(0.9, 24)
+    stain.rotateX(-Math.PI / 2)
+    stain.translate(DOME_CX, 0.017, DOME_CZ)
+    this.addStatic(stain, new THREE.MeshBasicMaterial({ color: 0x0d0612, transparent: true, opacity: 0.55 }))
+    // pulsing violet glow rising out of the hole — same sprite-pulse system as
+    // every other bioluminescent bloom, just centered right on the void
+    this.addBloom(DOME_CX, 0.25, DOME_CZ, GLOW_VIOLET, 1.4, 0.7)
 
     // root flare: short thick limbs splaying from the base out to the floor
     const rootCount = 5

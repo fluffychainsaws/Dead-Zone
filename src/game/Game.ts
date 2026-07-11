@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildArena, type Arena, type Collider, FLASHLIGHT_POS, NVG_POS } from './arena'
+import { buildArena, type Arena, type Collider, FLASHLIGHT_POS, NVG_POS, VOID_POS } from './arena'
 import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem, weaponKind } from './weapons'
@@ -458,6 +458,7 @@ export class Game {
     audio.unlock()
     audio.startMusic()
     audio.startClawTune()
+    audio.startVoidHum()
     audio.setIntensity(0.1)
   }
 
@@ -528,18 +529,21 @@ export class Game {
     audio.purchase()
   }
 
-  /** Flashlight (20k) & Night-Vision Goggles (40k) at the bottom of the lab stairs. Returns true if it owned the prompt. */
+  /** Flashlight & Night-Vision Goggles at the bottom of the lab stairs. Returns true if it owned the prompt. */
   private handleLightBuys(): boolean {
     const near = (p: THREE.Vector3) => Math.hypot(this.player.pos.x - p.x, this.player.pos.z - p.z) < 2.8
     const key = this.input.isTouch ? 'USE' : '[E]'
+    // TODO: bump these back up (20000 / 40000) once testing is done
+    const flashlightPrice = 100
+    const nvgPrice = 100
     if (near(FLASHLIGHT_POS)) {
-      this.hud.setPrompt(this.ownsFlashlight ? 'FLASHLIGHT — OWNED (T to toggle)' : `${key} FLASHLIGHT — 20000`)
+      this.hud.setPrompt(this.ownsFlashlight ? 'FLASHLIGHT — OWNED (T to toggle)' : `${key} FLASHLIGHT — ${flashlightPrice}`)
       if (this.input.consumeInteract() && !this.ownsFlashlight) {
-        if (this.economy.spend(20000)) {
+        if (this.economy.spend(flashlightPrice)) {
           this.ownsFlashlight = true
           this.lightMode = 'flashlight'
           this.hud.setPoints(this.economy.points)
-          this.hud.pointsDelta(-20000)
+          this.hud.pointsDelta(-flashlightPrice)
           this.hud.banner('FLASHLIGHT ACQUIRED — T TO TOGGLE', 2600)
           audio.purchase()
         } else {
@@ -550,13 +554,13 @@ export class Game {
       return true
     }
     if (near(NVG_POS)) {
-      this.hud.setPrompt(this.ownsNVG ? 'NIGHT VISION — OWNED (T to toggle)' : `${key} NIGHT VISION GOGGLES — 40000`)
+      this.hud.setPrompt(this.ownsNVG ? 'NIGHT VISION — OWNED (T to toggle)' : `${key} NIGHT VISION GOGGLES — ${nvgPrice}`)
       if (this.input.consumeInteract() && !this.ownsNVG) {
-        if (this.economy.spend(40000)) {
+        if (this.economy.spend(nvgPrice)) {
           this.ownsNVG = true
           this.lightMode = 'nvg'
           this.hud.setPoints(this.economy.points)
-          this.hud.pointsDelta(-40000)
+          this.hud.pointsDelta(-nvgPrice)
           this.hud.banner('NIGHT VISION ACQUIRED — T TO TOGGLE', 2600)
           audio.purchase()
         } else {
@@ -950,6 +954,15 @@ export class Game {
     audio.setClawTuneVolume(proximity)
   }
 
+  /** The pulsing hum from the black hole under the dome tree — same
+   *  proximity-gated approach as the claw machine's tune. */
+  private updateVoidHum() {
+    const dist = Math.hypot(this.player.pos.x - VOID_POS.x, this.player.pos.z - VOID_POS.z)
+    const RANGE = 6 // audible from further off than the claw tune — this is dread, not a jingle
+    const proximity = 1 - THREE.MathUtils.clamp(dist / RANGE, 0, 1)
+    audio.setVoidHumVolume(proximity)
+  }
+
   private handleShopping() {
     if (this.handleRevive()) return
     if (this.handleLightBuys()) return
@@ -1324,6 +1337,7 @@ export class Game {
       this.economy.update(dt)
       this.mysteryBox.update(dt)
       this.updateClawTune()
+      this.updateVoidHum()
       this.watchTeammates()
 
       // simulation: host & solo run the horde; clients interpolate

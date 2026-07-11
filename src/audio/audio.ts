@@ -33,6 +33,8 @@ export class AudioEngine {
   private musicNodes: { cutoff?: BiquadFilterNode } = {}
   private clawGain: GainNode | null = null
   private clawVolume = 0
+  private voidGain: GainNode | null = null
+  private voidVolume = 0
 
   /** Must be called from a user gesture (click/tap). Safe to call repeatedly. */
   unlock() {
@@ -243,6 +245,58 @@ export class AudioEngine {
     this.clawVolume = Math.max(0, Math.min(1, proximity))
     if (!this.ctx || !this.clawGain) return
     this.clawGain.gain.linearRampToValueAtTime(this.clawVolume * 0.55, this.ctx.currentTime + 0.2)
+  }
+
+  /** A low pulsing hum from the black hole under the dome tree — started once
+   *  and left running silent (gain 0) until setVoidHumVolume() raises it, same
+   *  pattern as the claw tune. */
+  startVoidHum() {
+    if (!this.ctx || this.voidGain) return
+    const ctx = this.ctx
+    this.voidGain = ctx.createGain()
+    this.voidGain.gain.value = 0 // outer volume — driven by setVoidHumVolume()
+    this.voidGain.connect(this.musicBus)
+
+    // inner carrier, amplitude-modulated by a slow LFO for the "pulsing" —
+    // an AudioParam sums its own .value with anything connected into it, so
+    // the LFO just rides on top of the 0.65 baseline as an offset
+    const carrier = ctx.createGain()
+    carrier.gain.value = 0.65
+    carrier.connect(this.voidGain)
+    const pulse = ctx.createOscillator()
+    pulse.frequency.value = 0.5
+    const pulseGain = ctx.createGain()
+    pulseGain.gain.value = 0.35
+    pulse.connect(pulseGain)
+    pulseGain.connect(carrier.gain)
+    pulse.start()
+
+    // a low, slightly detuned drone pair underneath — the "wrongness" beating
+    const droneFilter = ctx.createBiquadFilter()
+    droneFilter.type = 'lowpass'
+    droneFilter.frequency.value = 220
+    droneFilter.connect(carrier)
+    for (const [freq, gain] of [
+      [42, 0.7],
+      [42.6, 0.5],
+      [84, 0.25],
+    ] as const) {
+      const o = ctx.createOscillator()
+      o.type = 'sine'
+      o.frequency.value = freq
+      const g = ctx.createGain()
+      g.gain.value = gain
+      o.connect(g)
+      g.connect(droneFilter)
+      o.start()
+    }
+  }
+
+  /** 0 = silent, 1 = right on top of it. */
+  setVoidHumVolume(proximity: number) {
+    this.voidVolume = Math.max(0, Math.min(1, proximity))
+    if (!this.ctx || !this.voidGain) return
+    this.voidGain.gain.linearRampToValueAtTime(this.voidVolume * 0.6, this.ctx.currentTime + 0.2)
   }
 
   private scheduleMotif() {
