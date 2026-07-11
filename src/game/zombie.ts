@@ -504,8 +504,13 @@ export class Zombie {
       let mx = (wx / wd) * this.speed
       let mz = (wz / wd) * this.speed
       // whisker steering: if the path directly ahead is blocked by an obstacle,
-      // swing the heading in 45° steps until a clear probe is found
-      if (this.blockedAhead(nav.colliders, mx, mz)) {
+      // swing the heading in 45° steps until a clear probe is found. Skip this
+      // once the zombie has reached a window/gate/breach's approach zone — there
+      // the "obstacle" ahead is the objective itself (boarded windows must be
+      // hammered down, not evaded), so route-around logic just makes them pace
+      // sideways along the wall forever instead of pressing against it.
+      const atChokepoint = nav.inOpeningZone(pos)
+      if (!atChokepoint && this.blockedAhead(nav.colliders, mx, mz)) {
         const flip = this.id % 2 === 0 ? 1 : -1
         for (const a of [0.785, -0.785, 1.57, -1.57]) {
           const ang = a * flip
@@ -532,12 +537,16 @@ export class Zombie {
         }
       }
       // anti-stuck: barely moving while chasing → briefly strafe sideways
+      // (not at a chokepoint — there, "not moving" just means it's pressed
+      // against a window/gate as intended, chipping away at it)
       if (this.sideStep > 0) {
         this.sideStep -= dt
-        const px = -mz * this.sideSign
-        const pz = mx * this.sideSign
-        mx = px
-        mz = pz
+        if (!atChokepoint) {
+          const px = -mz * this.sideSign
+          const pz = mx * this.sideSign
+          mx = px
+          mz = pz
+        }
       }
       pos.x += mx * dt
       this.resolve(nav.colliders, 'x')
