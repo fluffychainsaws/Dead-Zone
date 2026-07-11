@@ -858,16 +858,16 @@ export class Game {
     }
   }
 
-  /** Fades the claw machine's locator jingle in as the player closes in on it. */
+  /** Carnival tune only plays once the player is right on top of the machine —
+   *  not a locator beacon audible from across the map. */
   private updateClawTune() {
     const dist = Math.hypot(
       this.player.pos.x - this.mysteryBox.pos.x,
       this.player.pos.z - this.mysteryBox.pos.z,
     )
-    const NEAR = 4
-    const FAR = 32
-    const proximity = 1 - THREE.MathUtils.clamp((dist - NEAR) / (FAR - NEAR), 0, 1)
-    audio.setClawTuneVolume(proximity * proximity) // ease-in — stays faint until fairly close
+    const RANGE = 1.5 // ~5 ft
+    const proximity = 1 - THREE.MathUtils.clamp(dist / RANGE, 0, 1)
+    audio.setClawTuneVolume(proximity)
   }
 
   private handleShopping() {

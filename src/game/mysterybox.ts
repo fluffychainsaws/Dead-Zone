@@ -96,6 +96,8 @@ export class MysteryBox {
   private trayBox: THREE.Group | null = null
   private breakT = 0
   private ownsWeapon: ((id: string) => boolean) | null = null
+  private marqueeLights: THREE.Mesh[] = []
+  private lightsT = 0
 
   private phase: Phase = 'toPile'
   private phaseT = 0
@@ -113,6 +115,23 @@ export class MysteryBox {
     const base = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 1.4), metal)
     base.position.y = 0.25
     this.group.add(base)
+
+    // control joystick, mounted on the front face of the base for show — the
+    // actual claw-play controls are the interact prompt, this just sells the look
+    const stickMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 70 })
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.06), metal)
+    panel.position.set(0, 0.4, 0.73)
+    this.group.add(panel)
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.16, 8), stickMat)
+    stick.position.set(0, 0.47, 0.75)
+    stick.rotation.x = -0.18
+    this.group.add(stick)
+    const knob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0xd02020, shininess: 90 }),
+    )
+    knob.position.set(0, 0.55, 0.765)
+    this.group.add(knob)
 
     // corner posts read the cabinet's shape even through the transparent glass
     const postMat = new THREE.MeshPhongMaterial({ color: 0x2b3035, shininess: 40 })
@@ -141,6 +160,23 @@ export class MysteryBox {
     const header = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.22, 1.4), metal)
     header.position.y = 2.11
     this.group.add(header)
+
+    // carnival marquee bulbs along both sides of the header, twinkling in update()
+    const bulbColors = [0xff3030, 0xffd020, 0x30a0ff, 0x30e050]
+    const bulbGeo = new THREE.SphereGeometry(0.035, 8, 8)
+    let bulbI = 0
+    for (const side of [-1, 1]) {
+      for (let z = -0.6; z <= 0.6; z += 0.24) {
+        const color = bulbColors[bulbI++ % bulbColors.length]
+        const bulb = new THREE.Mesh(
+          bulbGeo,
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }),
+        )
+        bulb.position.set(side * 0.87, 2.11, z)
+        this.group.add(bulb)
+        this.marqueeLights.push(bulb)
+      }
+    }
 
     // rail the claw rides along
     const rail = new THREE.Mesh(
@@ -300,6 +336,12 @@ export class MysteryBox {
   }
 
   update(dt: number) {
+    this.lightsT += dt
+    for (let i = 0; i < this.marqueeLights.length; i++) {
+      const mat = this.marqueeLights[i].material as THREE.MeshBasicMaterial
+      mat.opacity = 0.55 + 0.45 * Math.sin(this.lightsT * 4 + i * 0.9)
+    }
+
     if (this.trayBox && this.breakT > 0) {
       this.breakT -= dt
       const t = 1 - this.breakT / BREAK_TIME

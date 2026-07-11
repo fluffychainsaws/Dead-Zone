@@ -169,37 +169,71 @@ export class AudioEngine {
     this.musicNodes.cutoff?.frequency.linearRampToValueAtTime(180 + this.intensity * 640, t + 2)
   }
 
-  /** A looping circus-y jingle that marks the claw machine's location — call
-   *  setClawTuneVolume() every frame with a 0..1 proximity factor so players
-   *  can home in on it after it relocates. Started once and left running;
-   *  silent (gain 0) until a caller raises the volume. */
+  /** A looping calliope-style carnival tune that only plays once the player is
+   *  right on top of the claw machine — call setClawTuneVolume() every frame
+   *  with a 0..1 proximity factor. Started once and left running; silent
+   *  (gain 0) until a caller raises the volume. */
   startClawTune() {
     if (!this.ctx || this.clawGain) return
     const ctx = this.ctx
     this.clawGain = ctx.createGain()
     this.clawGain.gain.value = 0
     this.clawGain.connect(this.musicBus)
-    const notes = [523.25, 659.25, 783.99, 659.25, 987.77, 783.99] // a tinkling little arpeggio
+
+    // reed-organ timbre: sawtooth through a resonant bandpass, with a slow
+    // vibrato — what makes it read as "calliope" instead of a plain synth
+    const calliopeFilter = ctx.createBiquadFilter()
+    calliopeFilter.type = 'bandpass'
+    calliopeFilter.frequency.value = 1800
+    calliopeFilter.Q.value = 0.8
+    calliopeFilter.connect(this.clawGain)
+    const vibrato = ctx.createOscillator()
+    vibrato.frequency.value = 5.5
+    const vibratoGain = ctx.createGain()
+    vibratoGain.gain.value = 6
+    vibrato.connect(vibratoGain)
+    vibrato.start()
+
+    // a bouncy, waltzing carousel phrase — melody on top, oom-pah bass underneath
+    const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46]
+    const bass = [130.81, 196, 146.83, 196]
+    const noteLen = 0.22
+
     const playLoop = () => {
       if (!this.ctx || !this.clawGain) return
       const t = this.ctx.currentTime
       if (this.clawVolume > 0.005) {
-        notes.forEach((f, i) => {
-          const nt = t + i * 0.2
+        melody.forEach((f, i) => {
+          const nt = t + i * noteLen
+          const o = ctx.createOscillator()
+          o.type = 'sawtooth'
+          o.frequency.value = f
+          vibratoGain.connect(o.detune)
+          const g = ctx.createGain()
+          g.gain.setValueAtTime(0, nt)
+          g.gain.linearRampToValueAtTime(0.3, nt + 0.015)
+          g.gain.exponentialRampToValueAtTime(0.0001, nt + noteLen * 0.95)
+          o.connect(g)
+          g.connect(calliopeFilter)
+          o.start(nt)
+          o.stop(nt + noteLen)
+        })
+        bass.forEach((f, i) => {
+          const nt = t + i * (noteLen * 2)
           const o = ctx.createOscillator()
           o.type = 'triangle'
           o.frequency.value = f
           const g = ctx.createGain()
           g.gain.setValueAtTime(0, nt)
-          g.gain.linearRampToValueAtTime(0.4, nt + 0.02)
-          g.gain.exponentialRampToValueAtTime(0.0001, nt + 0.55)
+          g.gain.linearRampToValueAtTime(0.22, nt + 0.02)
+          g.gain.exponentialRampToValueAtTime(0.0001, nt + noteLen * 1.8)
           o.connect(g)
           g.connect(this.clawGain!)
           o.start(nt)
-          o.stop(nt + 0.6)
+          o.stop(nt + noteLen * 1.9)
         })
       }
-      setTimeout(playLoop, 2400)
+      setTimeout(playLoop, melody.length * noteLen * 1000)
     }
     playLoop()
   }
