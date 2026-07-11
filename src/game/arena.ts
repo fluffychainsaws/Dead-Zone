@@ -67,6 +67,17 @@ export interface WindowBarrier {
   zombieCollider: Collider
 }
 
+/** A guard tower overlooking the Prison Yard — always standing, but its
+ *  searchlight stays dark until activated (a one-time 5k toggle, not a real
+ *  climbable structure — this game has no elevation traversal to build on). */
+export interface Tower {
+  id: number
+  pos: THREE.Vector3
+  active: boolean
+  light: THREE.SpotLight
+  sweepPhase: number
+}
+
 const X0 = -30
 const X1 = 30
 const Z0 = -22
@@ -89,6 +100,18 @@ const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point si
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 
+// The Prison Yard — an open-air courtyard east of Warden's Wing, same footprint
+// as The Lab. Reached through a double door where the east-wall window used to
+// be, plus a short connecting corridor since the yard sits clear of the
+// building to avoid overlapping The Lab's own footprint to the north.
+const COURT_X0 = 40
+const COURT_X1 = COURT_X0 + (LAB_X1 - LAB_X0) // same width as The Lab
+const COURT_Z0 = -35
+const COURT_Z1 = COURT_Z0 + 48 // same depth as The Lab
+const COURT_FENCE_H = 3.2
+const TOWER_H = 6.5 // taller than the fence
+const TOWER_R = 2.2
+
 export class Arena {
   playerColliders: Collider[] = []
   zombieColliders: Collider[] = []
@@ -99,10 +122,12 @@ export class Arena {
     { id: 2, name: 'WARDEN’S WING', minX: 10, maxX: X1, minZ: Z0, maxZ: 0, open: false },
     { id: 3, name: 'ARMORY', minX: -10, maxX: 10, minZ: Z0, maxZ: 0, open: false },
     { id: 4, name: 'THE LAB', minX: LAB_X0, maxX: LAB_X1, minZ: LAB_Z0, maxZ: -22, open: false },
+    { id: 5, name: 'PRISON YARD', minX: COURT_X0, maxX: COURT_X1, minZ: COURT_Z0, maxZ: COURT_Z1, open: false },
   ]
   doors: Door[] = []
   openings: Opening[] = []
   windows: WindowBarrier[] = []
+  towers: Tower[] = []
 
   // exposed so the Game can plunge The Lab into darkness for the local player
   ambient!: THREE.AmbientLight
@@ -127,6 +152,16 @@ export class Arena {
     shininess: 90,
     side: THREE.DoubleSide,
   })
+  private grassMat = new THREE.MeshLambertMaterial({ color: 0x1e3a1a })
+  private fenceMat = new THREE.MeshPhongMaterial({
+    color: 0x6a7570,
+    transparent: true,
+    opacity: 0.4,
+    shininess: 30,
+    side: THREE.DoubleSide,
+  })
+  private towerMat = new THREE.MeshLambertMaterial({ color: 0x2b2f28 })
+  private doorMat = new THREE.MeshPhongMaterial({ color: 0x342820, shininess: 25 })
   // static geometry buckets, merged into one mesh per material after build
   private statics = new Map<THREE.Material, THREE.BufferGeometry[]>()
 
@@ -140,17 +175,20 @@ export class Arena {
     this.buildProps()
     this.buildLights()
     this.buildLab()
+    this.buildCourtyard()
     this.mergeStatics()
-    // invisible world edge so nobody sprints off into the fog (wraps jail + lab).
-    // Kept well clear of the lab's tunnel spawn points (LAB_Z0/LAB_X0 - TUNNEL_SPAWN_OFF) —
-    // this used to sit right on top of them, trapping freshly-spawned zombies against it.
+    // invisible world edge so nobody sprints off into the fog (wraps jail + lab
+    // + the yard). Kept well clear of the lab's tunnel spawn points
+    // (LAB_Z0/LAB_X0 - TUNNEL_SPAWN_OFF) — this used to sit right on top of
+    // them, trapping freshly-spawned zombies against it.
     const frameX0 = LAB_X0 - TUNNEL_SPAWN_OFF - 3
     const frameZ0 = LAB_Z0 - TUNNEL_SPAWN_OFF - 3
+    const frameX1 = COURT_X1 + 3 // extended east to clear the new yard
     const bounds: Collider[] = [
-      { minX: frameX0, maxX: 44, minZ: frameZ0, maxZ: frameZ0 + 2 }, // far north
-      { minX: frameX0, maxX: 44, minZ: 34, maxZ: 36 }, // far south
+      { minX: frameX0, maxX: frameX1, minZ: frameZ0, maxZ: frameZ0 + 2 }, // far north
+      { minX: frameX0, maxX: frameX1, minZ: 34, maxZ: 36 }, // far south
       { minX: frameX0, maxX: frameX0 + 2, minZ: frameZ0, maxZ: 36 }, // west
-      { minX: 42, maxX: 44, minZ: frameZ0, maxZ: 36 }, // east
+      { minX: frameX1 - 2, maxX: frameX1, minZ: frameZ0, maxZ: 36 }, // east
     ]
     this.playerColliders.push(...bounds)
     this.zombieColliders.push(...bounds)
@@ -487,10 +525,11 @@ export class Arena {
       { at: 11, roomId: 0, kind: 'window' },
       { at: -11, roomId: 1, kind: 'window' },
     ])
-    // east (x=X1): cell block + warden windows
+    // east (x=X1): cell block window + the Prison Yard double door (was a
+    // window; the yard sits out past this wall, connected by a short corridor)
     this.wallWithOpenings('z', X1, Z0, Z1, [
       { at: 11, roomId: 0, kind: 'window' },
-      { at: -11, roomId: 2, kind: 'window' },
+      { at: -11, roomId: 5, kind: 'gate' },
     ])
   }
 
@@ -508,31 +547,52 @@ export class Arena {
   }
 
   private buildGates() {
-    const defs: Array<{ name: string; cost: number; x: number; z: number; axis: 'x' | 'z'; rooms: [number, number] }> = [
+    const defs: Array<{
+      name: string
+      cost: number
+      x: number
+      z: number
+      axis: 'x' | 'z'
+      rooms: [number, number]
+      style?: 'bars' | 'double-door'
+    }> = [
       { name: 'CELL DOOR', cost: 750, x: -20, z: 0, axis: 'x', rooms: [0, 1] },
       { name: 'SECURITY GATE', cost: 1250, x: 20, z: 0, axis: 'x', rooms: [0, 2] },
       { name: 'ARMORY GATE', cost: 2000, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
       { name: 'ARMORY GATE', cost: 2000, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
       { name: 'THE LAB', cost: 1000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
+      { name: 'PRISON YARD', cost: 4000, x: X1, z: -11, axis: 'z', rooms: [2, 5], style: 'double-door' },
     ]
     defs.forEach((d, id) => {
       const group = new THREE.Group()
       group.position.set(d.x, 0, d.z)
       const isX = d.axis === 'x'
-      // whole gate is one merged mesh: 5 bars + 3 crossbars
-      const parts: THREE.BufferGeometry[] = []
-      for (let i = -2; i <= 2; i++) {
-        const bar = new THREE.CylinderGeometry(0.055, 0.055, 3.4)
-        const off = i * (GATE_W / 5.2)
-        bar.translate(isX ? off : 0, 1.7, isX ? 0 : off)
-        parts.push(bar)
+      let gateMesh: THREE.Mesh
+      if (d.style === 'double-door') {
+        // two wide wooden leaves filling the gap, rather than the usual bars
+        const parts: THREE.BufferGeometry[] = []
+        for (const side of [-1, 1]) {
+          const leaf = new THREE.BoxGeometry(isX ? GATE_W / 2 - 0.05 : 0.15, 3.4, isX ? 0.15 : GATE_W / 2 - 0.05)
+          leaf.translate(isX ? side * (GATE_W / 4) : 0, 1.7, isX ? 0 : side * (GATE_W / 4))
+          parts.push(leaf)
+        }
+        gateMesh = new THREE.Mesh(mergeGeometries(parts), this.doorMat)
+      } else {
+        // whole gate is one merged mesh: 5 bars + 3 crossbars
+        const parts: THREE.BufferGeometry[] = []
+        for (let i = -2; i <= 2; i++) {
+          const bar = new THREE.CylinderGeometry(0.055, 0.055, 3.4)
+          const off = i * (GATE_W / 5.2)
+          bar.translate(isX ? off : 0, 1.7, isX ? 0 : off)
+          parts.push(bar)
+        }
+        for (const y of [0.4, 1.7, 3.0]) {
+          const cross = new THREE.BoxGeometry(isX ? GATE_W : 0.12, 0.12, isX ? 0.12 : GATE_W)
+          cross.translate(0, y, 0)
+          parts.push(cross)
+        }
+        gateMesh = new THREE.Mesh(mergeGeometries(parts), this.barMat)
       }
-      for (const y of [0.4, 1.7, 3.0]) {
-        const cross = new THREE.BoxGeometry(isX ? GATE_W : 0.12, 0.12, isX ? 0.12 : GATE_W)
-        cross.translate(0, y, 0)
-        parts.push(cross)
-      }
-      const gateMesh = new THREE.Mesh(mergeGeometries(parts), this.barMat)
       group.add(gateMesh)
       const label = makeLabelSprite([d.name, `${d.cost}`])
       label.position.y = 4.1
@@ -876,6 +936,203 @@ export class Arena {
     // ---- light-source vendors, right at the bottom of the stairs ----
     this.buildItemStation(FLASHLIGHT_POS.x, FLASHLIGHT_POS.z, 'FLASHLIGHT', '20000', GLOW_GOLD)
     this.buildItemStation(NVG_POS.x, NVG_POS.z, 'NIGHT VISION', '40000', GLOW_CYAN)
+  }
+
+  /** The Prison Yard — an open-air courtyard where prisoners were let out.
+   *  Grass underfoot, a chain-link perimeter fence with its own breach gaps for
+   *  the horde, a battered weight bench, and two guard towers whose
+   *  searchlights only come on once activated (a straight cost, not a real
+   *  climb — see the Tower doc comment). */
+  private buildCourtyard() {
+    const cx = (COURT_X0 + COURT_X1) / 2
+    const cz = (COURT_Z0 + COURT_Z1) / 2
+    const w = COURT_X1 - COURT_X0
+    const d = COURT_Z1 - COURT_Z0
+
+    // ---- short corridor connecting the new door back to the yard ----
+    this.addFlatMesh(X1 + (COURT_X0 - X1) / 2, 0.02, -11, COURT_X0 - X1, GATE_W, this.labFloorMat, -Math.PI / 2)
+    for (const side of [-1, 1]) {
+      const wallZ = -11 + side * (GATE_W / 2 + 0.15)
+      const seg = new THREE.BoxGeometry(COURT_X0 - X1, H, 0.3)
+      seg.translate(X1 + (COURT_X0 - X1) / 2, H / 2, wallZ)
+      this.addStatic(seg, this.wallMat)
+      this.playerColliders.push({
+        minX: X1,
+        maxX: COURT_X0,
+        minZ: wallZ - 0.15,
+        maxZ: wallZ + 0.15,
+        height: H,
+      })
+    }
+
+    // ---- grass ground, its own patch since it sits outside the base map ----
+    this.addFlatMesh(cx, 0.015, cz, w, d, this.grassMat, -Math.PI / 2)
+
+    // ---- perimeter fence: see-through chain-link. Solid on the north side;
+    // the west side has a gap matching the corridor (the player's own way in,
+    // not a zombie spawn); east and south each get a breach gap the horde
+    // pours through, registered just like any other opening. ----
+    const buildFenceSide = (
+      isX: boolean, // true = runs along X (north/south walls), false = along Z (east/west walls)
+      fixed: number,
+      from: number,
+      to: number,
+      gapAt: number | null,
+      gapHalf = 2.4,
+    ) => {
+      const ranges: Array<[number, number]> = []
+      if (gapAt === null) ranges.push([from, to])
+      else {
+        if (gapAt - gapHalf > from) ranges.push([from, gapAt - gapHalf])
+        if (gapAt + gapHalf < to) ranges.push([gapAt + gapHalf, to])
+      }
+      for (const [a, b] of ranges) {
+        if (b - a < 0.1) continue
+        const mid = (a + b) / 2
+        const len = b - a
+        const geo = new THREE.BoxGeometry(isX ? len : 0.12, COURT_FENCE_H, isX ? 0.12 : len)
+        geo.translate(isX ? mid : fixed, COURT_FENCE_H / 2, isX ? fixed : mid)
+        this.addStatic(geo, this.fenceMat)
+        const c: Collider = {
+          minX: isX ? a : fixed - 0.12,
+          maxX: isX ? b : fixed + 0.12,
+          minZ: isX ? fixed - 0.12 : a,
+          maxZ: isX ? fixed + 0.12 : b,
+          height: COURT_FENCE_H,
+        }
+        this.playerColliders.push(c)
+        this.zombieColliders.push(c)
+      }
+    }
+    buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1, null) // north — solid
+    buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, cz) // east — horde breach
+    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1, cx) // south — horde breach
+    buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, -11, GATE_W / 2 + 0.2) // west — corridor gap
+
+    // zombie spawn points at the two breach gaps, same pattern as every other opening
+    this.openings.push({
+      roomId: 5,
+      outside: new THREE.Vector3(COURT_X1 + 2.5, 0, cz),
+      inside: new THREE.Vector3(COURT_X1 - 2.5, 0, cz),
+      zone: { minX: COURT_X1 - 3.5, maxX: COURT_X1 + 3.5, minZ: cz - 3, maxZ: cz + 3 },
+    })
+    this.openings.push({
+      roomId: 5,
+      outside: new THREE.Vector3(cx, 0, COURT_Z1 + 2.5),
+      inside: new THREE.Vector3(cx, 0, COURT_Z1 - 2.5),
+      zone: { minX: cx - 3, maxX: cx + 3, minZ: COURT_Z1 - 3.5, maxZ: COURT_Z1 + 3.5 },
+    })
+
+    // ---- a battered weight bench, just something for the eye to land on ----
+    const benchMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a })
+    const barMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1e, shininess: 60 })
+    const benchX = cx - 8
+    const benchZ = cz + 6
+    const bench = new THREE.BoxGeometry(0.5, 0.5, 1.8)
+    bench.translate(benchX, 0.5, benchZ)
+    this.addStatic(bench, benchMat)
+    for (const side of [-1, 1]) {
+      const rack = new THREE.BoxGeometry(0.15, 1.1, 0.15)
+      rack.translate(benchX, 0.55, benchZ + side * 0.8)
+      this.addStatic(rack, barMat)
+    }
+    const barbell = new THREE.CylinderGeometry(0.04, 0.04, 2.2, 8)
+    barbell.rotateZ(Math.PI / 2)
+    barbell.translate(benchX, 1.05, benchZ)
+    this.addStatic(barbell, barMat)
+    for (const side of [-1, 1]) {
+      const plate = new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12)
+      plate.rotateZ(Math.PI / 2)
+      plate.translate(benchX + side * 1.0, 1.05, benchZ)
+      this.addStatic(plate, barMat)
+    }
+
+    // ---- guard towers on the outer edge, taller than the fence ----
+    const towerSpots: Array<[number, number]> = [
+      [COURT_X0 + 2.5, COURT_Z0 + 2.5],
+      [COURT_X1 - 2.5, COURT_Z1 - 2.5],
+    ]
+    towerSpots.forEach(([tx, tz], id) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(TOWER_R * 0.55, TOWER_R * 0.7, TOWER_H, 8), this.towerMat)
+      post.position.set(tx, TOWER_H / 2, tz)
+      this.scene.add(post)
+      this.colliderMeshes.push(post)
+      const deck = new THREE.Mesh(new THREE.CylinderGeometry(TOWER_R, TOWER_R, 0.3, 8), this.towerMat)
+      deck.position.set(tx, TOWER_H + 0.15, tz)
+      this.scene.add(deck)
+      this.colliderMeshes.push(deck)
+      const roofPosts = new THREE.Group()
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+        const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), this.towerMat)
+        post2.position.set(Math.cos(a) * TOWER_R * 0.75, TOWER_H + 0.95, Math.sin(a) * TOWER_R * 0.75)
+        roofPosts.add(post2)
+      }
+      roofPosts.position.set(tx, 0, tz)
+      this.scene.add(roofPosts)
+      this.playerColliders.push({
+        minX: tx - TOWER_R,
+        maxX: tx + TOWER_R,
+        minZ: tz - TOWER_R,
+        maxZ: tz + TOWER_R,
+        height: TOWER_H + 1,
+      })
+      this.zombieColliders.push({
+        minX: tx - TOWER_R,
+        maxX: tx + TOWER_R,
+        minZ: tz - TOWER_R,
+        maxZ: tz + TOWER_R,
+        height: TOWER_H + 1,
+      })
+
+      // searchlight — off until activated, then sweeps slowly across the yard
+      const light = new THREE.SpotLight(0xdfffe0, 0, 60, Math.PI / 10, 0.4, 1.4)
+      light.position.set(tx, TOWER_H + 1.4, tz)
+      const target = new THREE.Object3D()
+      target.position.set(cx, 0, cz)
+      this.scene.add(target)
+      light.target = target
+      this.scene.add(light)
+
+      const label = makeLabelSprite(['GUARD TOWER', '5000'])
+      label.position.set(tx, TOWER_H + 2.4, tz)
+      this.scene.add(label)
+
+      this.towers.push({ id, pos: new THREE.Vector3(tx, 0, tz), active: false, light, sweepPhase: id * Math.PI })
+    })
+  }
+
+  /** Turns on a guard tower's searchlight — a one-time purchase, not a climb. */
+  activateTower(id: number) {
+    const tower = this.towers[id]
+    if (!tower || tower.active) return
+    tower.active = true
+    tower.light.intensity = 3.5
+  }
+
+  nearestInactiveTower(pos: THREE.Vector3, maxDist = 6): Tower | null {
+    let best: Tower | null = null
+    let bestD = maxDist
+    for (const t of this.towers) {
+      if (t.active) continue
+      const dist = Math.hypot(pos.x - t.pos.x, pos.z - t.pos.z)
+      if (dist < bestD) {
+        bestD = dist
+        best = t
+      }
+    }
+    return best
+  }
+
+  /** Sweeps active searchlights slowly back and forth across the yard. */
+  updateCourtyard(elapsed: number) {
+    const cx = (COURT_X0 + COURT_X1) / 2
+    const cz = (COURT_Z0 + COURT_Z1) / 2
+    for (const tower of this.towers) {
+      if (!tower.active) continue
+      const sweep = Math.sin(elapsed * 0.25 + tower.sweepPhase) * 16
+      tower.light.target.position.set(cx + sweep, 0, cz + Math.cos(elapsed * 0.18 + tower.sweepPhase) * 10)
+    }
   }
 
   private buildItemStation(x: number, z: number, top: string, bottom: string, stops: [string, string, string]) {

@@ -251,6 +251,7 @@ export class Game {
     })
     this.net.onDoor((id) => this.openDoorEverywhere(id))
     this.net.onWindowRepair((id) => this.repairWindowEverywhere(id))
+    this.net.onTowerActivate((id) => this.activateTowerEverywhere(id))
     this.net.onShot((shot, from) => {
       // trust the peer's hit — co-op, host applies authoritative damage
       this.effects.tracer(
@@ -596,6 +597,9 @@ export class Game {
     for (const [id, boards] of (s.wb ?? []).entries()) {
       this.arena.setWindowBoards(id, boards)
     }
+    for (const id of s.ta ?? []) {
+      this.arena.activateTower(id)
+    }
     this.remoteZombies.applyState(s.z)
     const myLatch = (s.mg ?? []).find(([, targetId]) => targetId === selfId)
     this.myLatchClientZid = myLatch ? myLatch[0] : null
@@ -771,6 +775,33 @@ export class Game {
     if (broadcast && this.netMode === 'client') this.net?.sendWindowRepair(id)
   }
 
+  /** Switch on a guard tower's searchlight — a straight cost, not a climb.
+   *  Returns true if it owned the prompt. */
+  private handleTowerActivation(): boolean {
+    const tower = this.arena.nearestInactiveTower(this.player.pos)
+    if (!tower) return false
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    const cost = 5000
+    this.hud.setPrompt(`${key} ACTIVATE GUARD TOWER — ${cost}`)
+    if (this.input.consumeInteract()) {
+      if (this.economy.spend(cost)) {
+        this.hud.setPoints(this.economy.points)
+        this.hud.pointsDelta(-cost)
+        this.activateTowerEverywhere(tower.id)
+      } else {
+        this.hud.banner('NOT ENOUGH POINTS', 1200)
+        audio.deny()
+      }
+    }
+    return true
+  }
+
+  private activateTowerEverywhere(id: number, broadcast = true) {
+    this.arena.activateTower(id)
+    audio.purchase()
+    if (broadcast && this.netMode === 'client') this.net?.sendTowerActivate(id)
+  }
+
   /** Buy open a locked gate. Returns true if it owned the prompt. */
   private handleDoors(): boolean {
     const door = this.arena.nearestClosedDoor(this.player.pos)
@@ -923,6 +954,7 @@ export class Game {
     if (this.handleLightBuys()) return
     if (this.handleDoors()) return
     if (this.handleWindowRepair()) return
+    if (this.handleTowerActivation()) return
     if (this.handleMysteryBox()) return
     const station = this.economy.nearestStation(this.player.pos)
     if (!station) {
@@ -1046,6 +1078,7 @@ export class Game {
       mg: latches,
       gr: grabs,
       wb: this.arena.windows.map((w) => w.boards),
+      ta: this.arena.towers.filter((t) => t.active).map((t) => t.id),
     }
     this.net.sendState(state)
   }
@@ -1140,6 +1173,7 @@ export class Game {
         if (this.netMode === 'solo') {
           // solo pause freezes the whole world
           this.arena.updateFlora(this.clock.getElapsedTime())
+      this.arena.updateCourtyard(this.clock.getElapsedTime())
           this.renderer.render(this.scene, this.camera)
           return
         }
@@ -1194,6 +1228,7 @@ export class Game {
       this.player.updateBody()
       this.updateVision()
       this.arena.updateFlora(this.clock.getElapsedTime())
+      this.arena.updateCourtyard(this.clock.getElapsedTime())
 
       // downed players drop to their sidearm but keep fighting
       if (this.player.downed !== this.wasDowned) {

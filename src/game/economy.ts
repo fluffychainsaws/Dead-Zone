@@ -35,7 +35,7 @@ const STATIONS: Array<{ weapon: string; price: number; pos: number; facing: Faci
   { weapon: 'garand', price: 600, pos: -6, facing: 'south' }, // cell block, by the cells
   { weapon: 'trench', price: 1200, pos: -6, facing: 'west' }, // showers
   { weapon: 'kurz', price: 1500, pos: -6, facing: 'east' }, // warden's wing
-  { weapon: 'magnum', price: 1800, pos: 25.5, facing: 'north' }, // warden's wing
+  { weapon: 'magnum', price: 1800, pos: -18, facing: 'east' }, // warden's wing, right by the yard door
   { weapon: 'liberator', price: 2500, pos: -8.5, facing: 'north' }, // armory west
   { weapon: 'hellfire', price: 3200, pos: 8.5, facing: 'north' }, // armory east
   { weapon: 'grinder', price: 3000, pos: 0, facing: 'north' }, // armory center — belt-fed
