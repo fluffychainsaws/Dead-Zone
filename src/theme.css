@@ -38,6 +38,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  filter: url(#gamma-filter);
 }
 
 #title-screen {
@@ -1016,6 +1017,19 @@ body {
   height: 28px; /* generous touch target on mobile */
   accent-color: rgb(132, 255, 90);
   cursor: pointer;
+}
+
+#pause-display {
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(132, 255, 90, 0.2);
+}
+
+#pause-box .pause-row-label {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  white-space: nowrap;
 }
 
 /* ---------------- audio toggles ---------------- */

@@ -1,4 +1,5 @@
 import { audio } from '../audio/audio'
+import { display } from '../game/display'
 
 export class PauseMenu {
   onResume: (() => void) | null = null
@@ -27,6 +28,12 @@ export class PauseMenu {
             <input id="pause-sfx-volume" type="range" min="0" max="100" step="1" />
           </div>
         </div>
+        <div id="pause-display">
+          <div class="pause-audio-row">
+            <span class="pause-row-label">☀ BRIGHTNESS</span>
+            <input id="pause-brightness" type="range" min="50" max="200" step="5" />
+          </div>
+        </div>
         <button id="pause-resume">RESUME</button>
         <button id="pause-invite">INVITE</button>
         <button id="pause-leave">LEAVE GAME</button>
@@ -45,6 +52,15 @@ export class PauseMenu {
     })
     this.inviteBtn.addEventListener('click', () => void this.invite())
     this.bindAudioControls()
+    this.bindDisplayControls()
+  }
+
+  private bindDisplayControls() {
+    const brightness = this.root.querySelector<HTMLInputElement>('#pause-brightness')!
+    brightness.value = String(Math.round(display.settings.brightness * 100))
+    brightness.addEventListener('input', () => {
+      display.setBrightness(Number(brightness.value) / 100)
+    })
   }
 
   private bindAudioControls() {

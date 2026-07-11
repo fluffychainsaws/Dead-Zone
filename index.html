@@ -16,6 +16,15 @@
     <title>DEAD ZONE</title>
   </head>
   <body>
+    <svg width="0" height="0" style="position: absolute">
+      <filter id="gamma-filter" color-interpolation-filters="sRGB">
+        <feComponentTransfer>
+          <feFuncR id="gamma-r" type="gamma" exponent="1" amplitude="1" offset="0" />
+          <feFuncG id="gamma-g" type="gamma" exponent="1" amplitude="1" offset="0" />
+          <feFuncB id="gamma-b" type="gamma" exponent="1" amplitude="1" offset="0" />
+        </feComponentTransfer>
+      </filter>
+    </svg>
     <div id="app">
       <canvas id="scene"></canvas>
       <div id="title-screen">
