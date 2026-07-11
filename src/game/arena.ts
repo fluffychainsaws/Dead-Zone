@@ -1424,14 +1424,30 @@ export class Arena {
     })
   }
 
-  nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
+  /** Spreads a choke-point waypoint sideways so a crowd of zombies converging on
+   *  the same gap don't all target the identical coordinate (which otherwise jams
+   *  them into a mutually-blocking clump right at the opening). `id` seeds a stable
+   *  per-zombie offset; `dirX/dirZ` is the through-gap direction to offset across. */
+  private spread(p: THREE.Vector3, dirX: number, dirZ: number, id: number): THREE.Vector3 {
+    const len = Math.hypot(dirX, dirZ) || 1
+    const px = -dirZ / len
+    const pz = dirX / len
+    const offset = (((id * 2654435761) >>> 0) % 100) / 100 - 0.5 // stable pseudo-random in [-0.5, 0.5)
+    const spreadWidth = 1.6
+    return new THREE.Vector3(p.x + px * offset * spreadWidth, 0, p.z + pz * offset * spreadWidth)
+  }
+
+  nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3, id = 0): THREE.Vector3 {
     for (const ring of this.ringObstacles) {
       const posIn = Math.hypot(pos.x - ring.cx, pos.z - ring.cz) < ring.radius - 0.8
       const targetIn = Math.hypot(target.x - ring.cx, target.z - ring.cz) < ring.radius - 0.8
       if (posIn === targetIn) continue
       const towardGap = posIn ? ring.gapInside : ring.gapOutside
+      const farGap = posIn ? ring.gapOutside : ring.gapInside
       const dist = Math.hypot(pos.x - towardGap.x, pos.z - towardGap.z)
-      return dist > 1.2 ? towardGap : posIn ? ring.gapOutside : ring.gapInside
+      const dirX = farGap.x - towardGap.x
+      const dirZ = farGap.z - towardGap.z
+      return dist > 1.2 ? this.spread(towardGap, dirX, dirZ, id) : this.spread(farGap, dirX, dirZ, id)
     }
 
     const ra = this.roomOf(pos.x, pos.z)
@@ -1441,14 +1457,19 @@ export class Arena {
       // outside the building (a spawn tunnel/window): crawl in through the nearest
       // opening — almost always its own — then the room graph routes it onward
       const o = this.nearestOpening(pos, null)
-      return o ? o.inside : target
+      if (!o) return target
+      return this.spread(o.inside, o.inside.x - o.outside.x, o.inside.z - o.outside.z, id)
     }
     if (rb === -1) {
       // target fled outside: leave through this room's nearest opening
       const o = this.nearestOpening(pos, ra)
       if (!o) return target
       const distToGap = Math.hypot(pos.x - o.inside.x, pos.z - o.inside.z)
-      return distToGap > 1.4 ? o.inside : o.outside
+      const dirX = o.outside.x - o.inside.x
+      const dirZ = o.outside.z - o.inside.z
+      return distToGap > 1.4
+        ? this.spread(o.inside, dirX, dirZ, id)
+        : this.spread(o.outside, dirX, dirZ, id)
     }
 
     // BFS over rooms connected by open doors

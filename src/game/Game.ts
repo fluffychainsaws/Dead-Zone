@@ -483,8 +483,9 @@ export class Game {
   private zombieNav() {
     return {
       colliders: this.arena.zombieColliders,
-      nextWaypoint: (p: THREE.Vector3, t: THREE.Vector3) => this.arena.nextWaypoint(p, t),
+      nextWaypoint: (p: THREE.Vector3, t: THREE.Vector3, id: number) => this.arena.nextWaypoint(p, t, id),
       inOpeningZone: (p: THREE.Vector3) => this.arena.inOpeningZone(p),
+      clawPos: this.mysteryBox.pos,
     }
   }
 

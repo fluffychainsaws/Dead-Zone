@@ -128,8 +128,10 @@ export interface AttackResult {
 /** What a zombie needs to find its way: colliders it respects + waypoint routing. */
 export interface ZombieNav {
   colliders: Collider[]
-  nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3
+  nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3, id: number): THREE.Vector3
   inOpeningZone(pos: THREE.Vector3): boolean
+  /** The claw machine's position — a persistently-stuck zombie gets teleported near here. */
+  clawPos: THREE.Vector3
 }
 
 interface Parts {
@@ -184,6 +186,7 @@ export class Zombie {
   private sideStep = 0 // seconds of lateral escape left
   private sideSign = 1
   private stuckCycles = 0 // consecutive failed strafe attempts — escalates to a hard unstick
+  private longStuckT = 0 // seconds of near-zero net progress — escalates past the hard unstick to a teleport
   private hop = 0 // vault height, eased
 
   // midget jump/latch internals
@@ -494,7 +497,7 @@ export class Zombie {
       this.parts.armR.rotation.x = -Math.PI / 2 - lunge * 0.5
     } else {
       // route via openings/gates, then shamble with light flock separation
-      const wp = nav.nextWaypoint(pos, target.pos)
+      const wp = nav.nextWaypoint(pos, target.pos, this.id)
       const wx = wp.x - pos.x
       const wz = wp.z - pos.z
       const wd = Math.hypot(wx, wz) || 1
@@ -544,6 +547,7 @@ export class Zombie {
       const moved = Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z)
       if (moved < this.speed * dt * 0.2) {
         this.stuckT += dt
+        this.longStuckT += dt
         if (this.stuckT > 1.0) {
           this.stuckT = 0
           this.stuckCycles++
@@ -559,8 +563,20 @@ export class Zombie {
             this.sideSign = Math.random() < 0.5 ? 1 : -1
           }
         }
+        if (this.longStuckT > 8.0) {
+          // even the hard-unstick snap hasn't helped for a long stretch (e.g. wedged
+          // against something the snap keeps re-wedging into) — give up on the
+          // current spot entirely and respawn it near the claw machine instead.
+          const ang = Math.random() * Math.PI * 2
+          pos.x = nav.clawPos.x + Math.cos(ang) * 2.5
+          pos.z = nav.clawPos.z + Math.sin(ang) * 2.5
+          this.longStuckT = 0
+          this.stuckT = 0
+          this.stuckCycles = 0
+        }
       } else {
         this.stuckT = Math.max(0, this.stuckT - dt * 2)
+        this.longStuckT = Math.max(0, this.longStuckT - dt * 2)
         this.stuckCycles = 0
       }
       this.lastPos.copy(pos)
