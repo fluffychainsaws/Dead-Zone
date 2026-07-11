@@ -1141,7 +1141,27 @@ export class Arena {
     return best
   }
 
+  /** True if a point sits inside the dome's ring wall (with a little slack so
+   *  zombies don't dither right at the boundary). */
+  private insideDome(x: number, z: number): boolean {
+    return Math.hypot(x - DOME_CX, z - DOME_CZ) < DOME_R - 0.8
+  }
+
   nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
+    // the dome ring is a solid obstacle with a single south-facing gap, sitting
+    // entirely inside one room — the room graph below has no idea it exists, so
+    // a zombie on one side and the player on the other would otherwise just
+    // push straight against the glass instead of routing around to the gap
+    const posInDome = this.insideDome(pos.x, pos.z)
+    const targetInDome = this.insideDome(target.x, target.z)
+    if (posInDome !== targetInDome) {
+      const gapOutside = new THREE.Vector3(DOME_CX, 0, DOME_CZ + DOME_R + 1.6)
+      const gapInside = new THREE.Vector3(DOME_CX, 0, DOME_CZ + DOME_R - 1.6)
+      const towardGap = posInDome ? gapInside : gapOutside
+      const dist = Math.hypot(pos.x - towardGap.x, pos.z - towardGap.z)
+      return dist > 1.2 ? towardGap : posInDome ? gapOutside : gapInside
+    }
+
     const ra = this.roomOf(pos.x, pos.z)
     const rb = this.roomOf(target.x, target.z)
     if (ra === rb) return target
