@@ -700,7 +700,8 @@ export class Game {
     const dz = source.pos.z - this.player.pos.z
     const dist = Math.hypot(dx, dz)
     const angle = Math.atan2(dx, dz) - this.player.yaw
-    audio.groan(-Math.sin(angle), Math.max(0, 1 - dist / 30), source.runner)
+    // pan was inverted — sources to the player's right were panning left
+    audio.groan(Math.sin(angle), Math.max(0, 1 - dist / 30), source.runner)
   }
 
   /** Revive prompt takes priority over wall-buys. Returns true if it owned the prompt. */
