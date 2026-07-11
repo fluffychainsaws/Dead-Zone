@@ -112,20 +112,22 @@ export class Economy {
       board.position.set(-0.03, 1.5, 0)
       display.add(board)
 
-      // mounted flat/horizontal against the board, like a rack display —
-      // buildViewmodel() bundles in first-person hands, which read as a pair
-      // of disembodied arms once the gun is unhooked from the player's own
-      // viewmodel rig, so strip them and mount just the gun itself
+      // mounted upright against the board, muzzle to the ceiling, like a
+      // rack display — buildViewmodel() bundles in first-person hands, which
+      // read as a pair of disembodied arms once the gun is unhooked from the
+      // player's own viewmodel rig, so strip them and mount just the gun itself
       const gun = buildViewmodel(def.id)
       const leftArm = gun.userData.leftArm as THREE.Object3D | undefined
       const rightArm = gun.userData.rightArm as THREE.Object3D | undefined
       if (leftArm) gun.remove(leftArm)
       if (rightArm) gun.remove(rightArm)
       gun.position.set(0.08, 1.5, 0)
-      // lay the gun on its side facing outward, away from the wall — the
+      // first roll it onto its side facing outward, away from the wall — the
       // opposite sign here was rotating the gun's top (sights/rail) straight
-      // into the board instead of out toward the room
+      // into the board instead of out toward the room — then pitch the
+      // muzzle up 90° so it stands vertical instead of lying flat
       gun.rotation.z = -Math.PI / 2
+      gun.rotation.x = Math.PI / 2
       gun.scale.setScalar(1.8)
       gun.name = 'display-gun'
       display.add(gun)
