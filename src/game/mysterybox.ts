@@ -31,11 +31,11 @@ const PHASE_TIME: Record<Phase, number> = {
 }
 
 const RAIL_Y = 1.85
-const PILE_Y = 0.58
+const PILE_Y = 0.51 // the base's top surface — where the pile actually rests
 const CHUTE_X = 0.5
 const CHUTE_DROP_Y = 1.05
-const TRAY_POS = new THREE.Vector3(0.5, 0.42, 0.95) // outside the cabinet, reachable without opening it
-const TINY_SCALE = 0.22 // pile/carried size
+const TRAY_POS = new THREE.Vector3(0.5, 0.42, 1.3) // further out from the cabinet, easy to reach without opening it
+const TINY_SCALE = 0.44 // pile/carried size
 const TROPHY_SCALE = 0.85 // "regular size" once it's popped out into the tray
 
 // full play envelope the claw's gantry can reach — the whole cabinet floor,
@@ -219,16 +219,20 @@ export class MysteryBox {
           PLAY_X_MIN + (c / (cols - 1)) * (PLAY_X_MAX - PLAY_X_MIN) + (Math.random() - 0.5) * 0.09
         const z =
           PLAY_Z_MIN + (r / (rows - 1)) * (PLAY_Z_MAX - PLAY_Z_MIN) + (Math.random() - 0.5) * 0.09
-        const y = Math.random() < 0.2 ? PILE_Y + 0.35 : PILE_Y // a few stacked for a heaped look
         const weapon = shuffled[wi++ % shuffled.length]
         const prize = buildTrophyGun(weapon.id, TINY_SCALE)
-        prize.position.set(x, y, z)
+        prize.position.set(x, 0, z)
         // tumbled, not robotically upright — it's a heap of tiny guns
         prize.rotation.set(
           (Math.random() - 0.5) * 1.4,
           Math.random() * Math.PI * 2,
           (Math.random() - 0.5) * 1.4,
         )
+        // rest the gun's actual lowest point on the floor — tumbling it
+        // however means no fixed Y works for every rotation, so measure it
+        prize.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(prize)
+        prize.position.y = PILE_Y - box.min.y
         this.group.add(prize)
         this.pile.push({ group: prize, homeX: x, homeZ: z, weapon })
       }
