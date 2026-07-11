@@ -30,7 +30,7 @@ export class AudioEngine {
   private noiseBuf!: AudioBuffer
   private musicStarted = false
   private intensity = 0
-  private musicNodes: { cutoff?: BiquadFilterNode; pulseGain?: GainNode } = {}
+  private musicNodes: { cutoff?: BiquadFilterNode } = {}
   private clawGain: GainNode | null = null
   private clawVolume = 0
 
@@ -129,29 +129,6 @@ export class AudioEngine {
     lfoGain.connect(cutoff.frequency)
     lfo.start()
 
-    // tension pulse — silent until intensity rises
-    const pulse = ctx.createOscillator()
-    pulse.type = 'square'
-    pulse.frequency.value = 110
-    const pulseGate = ctx.createOscillator()
-    pulseGate.type = 'square'
-    pulseGate.frequency.value = 1.8
-    const gateGain = ctx.createGain()
-    gateGain.gain.value = 0
-    const pulseGain = ctx.createGain()
-    pulseGain.gain.value = 0
-    pulseGate.connect(gateGain.gain)
-    pulse.connect(gateGain)
-    gateGain.connect(pulseGain)
-    const pulseLp = ctx.createBiquadFilter()
-    pulseLp.type = 'lowpass'
-    pulseLp.frequency.value = 400
-    pulseGain.connect(pulseLp)
-    pulseLp.connect(out)
-    pulse.start()
-    pulseGate.start()
-    this.musicNodes.pulseGain = pulseGain
-
     // distant wind — filtered noise with a slow breathing sweep, barely audible
     // but fills the silence between motifs with unease instead of dead air
     const windSrc = ctx.createBufferSource()
@@ -190,7 +167,6 @@ export class AudioEngine {
     if (!this.ctx) return
     const t = this.ctx.currentTime
     this.musicNodes.cutoff?.frequency.linearRampToValueAtTime(180 + this.intensity * 640, t + 2)
-    this.musicNodes.pulseGain?.gain.linearRampToValueAtTime(this.intensity * 0.05, t + 2)
   }
 
   /** A looping circus-y jingle that marks the claw machine's location — call
