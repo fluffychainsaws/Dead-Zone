@@ -1042,14 +1042,15 @@ export function buildViewmodel(defId: string): THREE.Group {
     g.userData.reloadStyle = bottomLoad ? 'bottom' : 'forward'
 
     // left/support hand — cradles the foregrip (or the frame, on handguns) and
-    // does the actual reload motion
+    // does the actual reload motion. Sized to visibly reach back toward the
+    // body instead of reading as a floating disembodied hand.
     const leftArm = new THREE.Group()
-    const leftForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.3, 8), sleeve)
+    const leftForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.46, 8), sleeve)
     leftForearm.rotation.x = Math.PI / 2
-    leftForearm.position.set(0, 0, 0.12)
+    leftForearm.position.set(0, 0, 0.2)
     leftArm.add(leftForearm)
-    const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.09), skin)
-    leftHand.position.set(0, 0, -0.05)
+    const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.13), skin)
+    leftHand.position.set(0, 0, -0.06)
     leftArm.add(leftHand)
     leftArm.position.set(bottomLoad ? -0.045 : -0.08, bottomLoad ? -0.13 : -0.06, bottomLoad ? 0.05 : -0.14)
     g.add(leftArm)
@@ -1059,11 +1060,11 @@ export function buildViewmodel(defId: string): THREE.Group {
 
     // right/trigger hand — stays on the grip, doesn't move during reload
     const rightArm = new THREE.Group()
-    const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.28, 8), sleeve)
+    const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.44, 8), sleeve)
     rightForearm.rotation.x = Math.PI / 2
-    rightForearm.position.set(0, 0, 0.14)
+    rightForearm.position.set(0, 0, 0.22)
     rightArm.add(rightForearm)
-    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.06, 0.09), skin)
+    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.085, 0.13), skin)
     rightHand.position.set(0, 0, 0.02)
     rightArm.add(rightHand)
     rightArm.position.set(0.06, -0.1, 0.07)

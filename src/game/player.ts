@@ -59,6 +59,7 @@ export class Player {
   private legGroup: THREE.Group | null = null
   private legL: THREE.Mesh | null = null
   private legR: THREE.Mesh | null = null
+  private torso: THREE.Mesh | null = null
 
   /** Floors hp at 0 — the Game decides whether that means downed or dead. */
   takeDamage(amount: number) {
@@ -76,7 +77,7 @@ export class Player {
     return this.time - this.lastHitAt < 0.35
   }
 
-  /** Builds the first-person leg mesh — call once, after the player exists. */
+  /** Builds the first-person body mesh — call once, after the player exists. */
   attachBody(scene: THREE.Scene) {
     const mat = new THREE.MeshLambertMaterial({ color: 0x2e3b2a })
     this.legGroup = new THREE.Group()
@@ -87,10 +88,19 @@ export class Player {
     this.legR = new THREE.Mesh(legGeo.clone(), mat)
     this.legR.position.set(0.12, 0.58, 0)
     this.legGroup.add(this.legL, this.legR)
+
+    // torso — sits on the hips, up to just under the eyeline, so looking down
+    // reveals a body the arms/legs actually belong to instead of floating
+    const torsoGeo = new THREE.BoxGeometry(0.4, 0.66, 0.26)
+    torsoGeo.translate(0, 0.33, 0) // pivot at the hip, extends upward
+    this.torso = new THREE.Mesh(torsoGeo, mat)
+    this.torso.position.set(0, 0.58, 0)
+    this.legGroup.add(this.torso)
+
     scene.add(this.legGroup)
   }
 
-  /** Positions and animates the legs — call every frame after update(). */
+  /** Positions and animates the body — call every frame after update(). */
   updateBody() {
     if (!this.legGroup || !this.legL || !this.legR) return
     this.legGroup.visible = this.alive && !this.downed
