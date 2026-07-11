@@ -442,9 +442,15 @@ export class MysteryBox {
           // carried, so the pile is never actually depleted
           this.grabbedPile.group.visible = false
           this.prizeBox = buildTrophyGun(this.offered!.id, TINY_SCALE)
-          this.claw.add(this.prizeBox)
-          this.prizeBox.position.set(0, -0.32, 0)
           this.prizeBox.rotation.set(0, 0, 0)
+          this.prizeBox.updateMatrixWorld(true)
+          const cbox = new THREE.Box3().setFromObject(this.prizeBox)
+          // hang it so its bottom lands exactly where the pile floor is,
+          // instead of a fixed offset that shoved bigger guns down through
+          // the floor the instant they were grabbed
+          const floorLocalY = PILE_Y - this.claw.position.y
+          this.prizeBox.position.set(0, floorLocalY - cbox.min.y, 0)
+          this.claw.add(this.prizeBox)
           this.drawLabel(this.offered!.name, '???')
         }
         break
