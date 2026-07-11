@@ -122,7 +122,10 @@ export class Economy {
       if (leftArm) gun.remove(leftArm)
       if (rightArm) gun.remove(rightArm)
       gun.position.set(0.08, 1.5, 0)
-      gun.rotation.z = Math.PI / 2
+      // lay the gun on its side facing outward, away from the wall — the
+      // opposite sign here was rotating the gun's top (sights/rail) straight
+      // into the board instead of out toward the room
+      gun.rotation.z = -Math.PI / 2
       gun.scale.setScalar(1.8)
       gun.name = 'display-gun'
       display.add(gun)
