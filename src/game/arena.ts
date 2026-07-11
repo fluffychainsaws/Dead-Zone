@@ -120,6 +120,13 @@ export class Arena {
   private labWallMat = new THREE.MeshLambertMaterial({ color: 0x161c22 })
   private labFloorMat = new THREE.MeshLambertMaterial({ color: 0x0d1013 })
   private labTrimMat = new THREE.MeshLambertMaterial({ color: 0x20303a })
+  private domeGlassMat = new THREE.MeshPhongMaterial({
+    color: 0x8fe8e0,
+    transparent: true,
+    opacity: 0.28,
+    shininess: 90,
+    side: THREE.DoubleSide,
+  })
   // static geometry buckets, merged into one mesh per material after build
   private statics = new Map<THREE.Material, THREE.BufferGeometry[]>()
 
@@ -719,10 +726,18 @@ export class Arena {
       const seg = new THREE.BoxGeometry(1.0, 3.6, 3.4)
       seg.rotateY(-a)
       seg.translate(px, 1.8, pz)
-      this.addStatic(seg, this.labTrimMat)
-      // players are walled out of the dome (enter via the south gap); zombies drift
-      // through the ornamental shell so they never wedge circling it
-      this.playerColliders.push({ minX: px - 1.4, maxX: px + 1.4, minZ: pz - 1.4, maxZ: pz + 1.4, height: 3.6 })
+      this.addStatic(seg, this.domeGlassMat)
+      // a real glass wall now — blocks players and zombies alike, both funnel
+      // through the south gap same as any other solid obstacle
+      const domeCollider: Collider = {
+        minX: px - 1.4,
+        maxX: px + 1.4,
+        minZ: pz - 1.4,
+        maxZ: pz + 1.4,
+        height: 3.6,
+      }
+      this.playerColliders.push(domeCollider)
+      this.zombieColliders.push(domeCollider)
       // cyan rim light on top of each dome segment
       if (i % 2 === 0) this.addBloom(px, 3.4, pz, GLOW_CYAN, 1.6, 0.4)
     }
