@@ -1068,6 +1068,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     rightArm.add(rightHand)
     rightArm.position.set(0.06, -0.1, 0.07)
     g.add(rightArm)
+    g.userData.rightArm = rightArm
   }
   g.position.set(0.28, -0.26, -0.55)
   return g

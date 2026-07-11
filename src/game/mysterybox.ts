@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { BOX_WEAPONS, type WeaponDef } from './weapons'
+import { BOX_WEAPONS, buildViewmodel, type WeaponDef } from './weapons'
 import { glowSprite, GLOW_GOLD } from './effects'
 
 export const BOX_COST = 950
@@ -36,6 +36,8 @@ const PILE_Y = 0.58
 const CHUTE_X = 0.5
 const CHUTE_DROP_Y = 1.05
 const TRAY_POS = new THREE.Vector3(0.5, 0.42, 0.95) // outside the cabinet, reachable without opening it
+const TINY_SCALE = 0.22 // pile/carried size
+const TROPHY_SCALE = 0.85 // "regular size" once it's popped out into the tray
 
 function smoothstep(t: number): number {
   return t * t * (3 - 2 * t)
@@ -57,26 +59,20 @@ interface PrizeBox {
   group: THREE.Group
   homeX: number
   homeZ: number
-  color: number
+  weapon: WeaponDef
 }
 
-function buildPrizeBox(color: number): THREE.Group {
-  const g = new THREE.Group()
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.2, 0.22),
-    new THREE.MeshLambertMaterial({ color }),
-  )
-  const ribbon = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.05, 0.06),
-    new THREE.MeshLambertMaterial({ color: 0xe0c020 }),
-  )
-  ribbon.position.y = 0.02
-  const ribbon2 = new THREE.Mesh(
-    new THREE.BoxGeometry(0.06, 0.05, 0.24),
-    new THREE.MeshLambertMaterial({ color: 0xe0c020 }),
-  )
-  ribbon2.position.y = 0.02
-  g.add(body, ribbon, ribbon2)
+/** A static display copy of a weapon's viewmodel — same mesh the FPS view uses,
+ *  just re-centered and stripped of the arms (which only make sense attached to
+ *  a player). Used for the pile, the one the claw carries, and the trophy in the tray. */
+function buildTrophyGun(id: string, scale: number): THREE.Group {
+  const g = buildViewmodel(id)
+  g.position.set(0, 0, 0)
+  g.rotation.set(0, 0, 0)
+  for (const arm of [g.userData.leftArm, g.userData.rightArm] as (THREE.Object3D | undefined)[]) {
+    if (arm) g.remove(arm)
+  }
+  g.scale.setScalar(scale)
   return g
 }
 
@@ -95,7 +91,6 @@ export class MysteryBox {
   private prizeBox: THREE.Group | null = null
   private trayBox: THREE.Group | null = null
   private breakT = 0
-  private ownsWeapon: ((id: string) => boolean) | null = null
   private marqueeLights: THREE.Mesh[] = []
   private lightsT = 0
 
@@ -103,6 +98,9 @@ export class MysteryBox {
   private phaseT = 0
   private labelCanvas = document.createElement('canvas')
   private labelTex: THREE.CanvasTexture
+  private trayLabelCanvas = document.createElement('canvas')
+  private trayLabelTex: THREE.CanvasTexture
+  private traySprite: THREE.Sprite
   private onTick: (() => void) | null = null
   private onReveal: (() => void) | null = null
 
@@ -187,9 +185,10 @@ export class MysteryBox {
     rail.position.set(0, RAIL_Y + 0.12, 0)
     this.group.add(rail)
 
-    // the pile of prize boxes, sitting on the cabinet floor — a full, heaped pile
-    const colors = [0x4a3a22, 0x2e4a22, 0x3a2244, 0x224a44, 0x4a2222, 0x22394a]
-    let ci = 0
+    // the pile of prize guns, sitting on the cabinet floor — a full, heaped pile.
+    // shuffled once so the pile shows a varied mix rather than list order.
+    const shuffled = [...BOX_WEAPONS].sort(() => Math.random() - 0.5)
+    let wi = 0
     for (const [x, z, y] of [
       [-0.55, -0.3],
       [-0.3, 0.1],
@@ -209,12 +208,17 @@ export class MysteryBox {
       [-0.28, -0.1, 0.78],
       [-0.6, 0.15, 0.78],
     ]) {
-      const color = colors[ci++ % colors.length]
-      const prize = buildPrizeBox(color)
+      const weapon = shuffled[wi++ % shuffled.length]
+      const prize = buildTrophyGun(weapon.id, TINY_SCALE)
       prize.position.set(x, y ?? PILE_Y, z)
-      prize.rotation.y = Math.random() * Math.PI
+      // tumbled, not robotically upright — it's a heap of tiny guns
+      prize.rotation.set(
+        (Math.random() - 0.5) * 1.4,
+        Math.random() * Math.PI * 2,
+        (Math.random() - 0.5) * 1.4,
+      )
       this.group.add(prize)
-      this.pile.push({ group: prize, homeX: x, homeZ: z, color })
+      this.pile.push({ group: prize, homeX: x, homeZ: z, weapon })
     }
 
     // claw head: housing + three prongs
@@ -252,6 +256,18 @@ export class MysteryBox {
     glow.position.y = 1.6
     this.group.add(glow)
 
+    // small name tag that floats over the trophy gun once it's in the tray
+    this.trayLabelCanvas.width = 256
+    this.trayLabelCanvas.height = 64
+    this.trayLabelTex = new THREE.CanvasTexture(this.trayLabelCanvas)
+    this.traySprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.trayLabelTex, transparent: true, depthWrite: false }),
+    )
+    this.traySprite.scale.set(0.85, 0.21, 1)
+    this.traySprite.position.set(TRAY_POS.x, TRAY_POS.y + 0.4, TRAY_POS.z)
+    this.traySprite.visible = false
+    this.group.add(this.traySprite)
+
     this.drawLabel('CLAW MACHINE', `${BOX_COST}`)
     scene.add(this.group)
   }
@@ -269,6 +285,20 @@ export class MysteryBox {
     ctx.fillStyle = '#e0c020'
     ctx.fillText(bottom, 256, 100)
     this.labelTex.needsUpdate = true
+  }
+
+  /** Small name tag floated over the trophy gun once it's popped out — deliberately
+   *  modest, unlike the big marquee label above the cabinet. */
+  private drawTrayLabel(name: string) {
+    const ctx = this.trayLabelCanvas.getContext('2d')!
+    ctx.clearRect(0, 0, 256, 64)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#e0c020'
+    ctx.shadowColor = '#000'
+    ctx.shadowBlur = 5
+    ctx.font = 'bold 20px Impact, Arial Black, sans-serif'
+    ctx.fillText(name, 128, 38)
+    this.trayLabelTex.needsUpdate = true
   }
 
   private updateCable() {
@@ -307,24 +337,18 @@ export class MysteryBox {
   }
 
   /** Call after payment succeeded — starts the claw sequence. `ownsWeapon` lets
-   *  the box avoid offering something already in the player's loadout. */
+   *  the box avoid offering something already in the player's loadout. The pile
+   *  is real guns now, so what gets grabbed is what you get — no hidden swap. */
   play(ownsWeapon: (id: string) => boolean) {
     if (this.state !== 'idle' || this.pile.length === 0) return
     this.state = 'busy'
     this.phase = 'toPile'
     this.phaseT = 0
-    this.offered = null // decided at the end of the 'choosing' phase, for real suspense
-    this.ownsWeapon = ownsWeapon
-    this.grabbedPile = this.pile[Math.floor(Math.random() * this.pile.length)]
+    const notOwned = this.pile.filter((p) => !ownsWeapon(p.weapon.id))
+    const candidates = notOwned.length > 0 ? notOwned : this.pile
+    this.grabbedPile = candidates[Math.floor(Math.random() * candidates.length)]
+    this.offered = this.grabbedPile.weapon
     this.setProngs(1)
-  }
-
-  /** Box weapons not already owned — falls back to the full list if somehow all
-   *  of them are (never happens with only 2 loadout slots, but stay safe). */
-  private availablePool(): WeaponDef[] {
-    if (!this.ownsWeapon) return BOX_WEAPONS
-    const pool = BOX_WEAPONS.filter((w) => !this.ownsWeapon!(w.id))
-    return pool.length > 0 ? pool : BOX_WEAPONS
   }
 
   /** Break open the box waiting in the tray. Returns the weapon it turns out to be. */
@@ -346,7 +370,7 @@ export class MysteryBox {
       this.breakT -= dt
       const t = 1 - this.breakT / BREAK_TIME
       this.trayBox.rotation.z = Math.sin(t * Math.PI * 6) * 0.25 * (1 - t)
-      this.trayBox.scale.setScalar(1 + t * 0.6)
+      this.trayBox.scale.setScalar(TROPHY_SCALE * (1 + t * 0.6))
       if (this.breakT <= 0) {
         this.group.remove(this.trayBox)
         disposeGroup(this.trayBox)
@@ -354,7 +378,10 @@ export class MysteryBox {
         this.offered = null
         this.state = 'idle'
         this.drawLabel('CLAW MACHINE', `${BOX_COST}`)
+        this.traySprite.visible = false
       }
+    } else if (this.trayBox) {
+      this.trayBox.rotation.y += dt * 1.4 // idle spin while it waits to be taken
     }
 
     if (this.state !== 'busy') return
@@ -376,29 +403,22 @@ export class MysteryBox {
       case 'grab':
         this.setProngs(1 - e)
         if (t >= 1 && this.grabbedPile) {
-          // the pile box just hides — a fresh box stands in for the one being carried,
-          // so the pile is never actually depleted
+          // the pile gun just hides — a fresh one stands in for the one being
+          // carried, so the pile is never actually depleted
           this.grabbedPile.group.visible = false
-          this.prizeBox = buildPrizeBox(this.grabbedPile.color)
+          this.prizeBox = buildTrophyGun(this.offered!.id, TINY_SCALE)
           this.claw.add(this.prizeBox)
           this.prizeBox.position.set(0, -0.32, 0)
           this.prizeBox.rotation.set(0, 0, 0)
+          this.drawLabel(this.offered!.name, '???')
         }
         break
-      case 'choosing': {
-        // claw holds still with the box while the prize is decided — the suspense beat
-        const pool = this.availablePool()
-        if (this.phaseT % 0.15 < dt) {
-          const random = pool[Math.floor(Math.random() * pool.length)]
-          this.drawLabel(random.name, '???')
-          this.onTick?.()
-        }
-        if (t >= 1) {
-          this.offered = pool[Math.floor(Math.random() * pool.length)]
-          this.drawLabel('IT’S DECIDED…', '???')
-        }
+      case 'choosing':
+        // claw holds still with the gun in view while tension builds — nothing
+        // left to decide, it's visibly the one being carried
+        if (this.phaseT % 0.4 < dt) this.onTick?.()
+        if (t >= 1) this.drawLabel(`IT’S A ${this.offered!.name}!`, `${BOX_COST}`)
         break
-      }
       case 'ascend':
         this.claw.position.y = (PILE_Y + 0.14) + (RAIL_Y - (PILE_Y + 0.14)) * e
         break
@@ -437,10 +457,12 @@ export class MysteryBox {
         this.phase = PHASES[idx + 1]
         this.phaseT = 0
       } else {
-        // landed — box waits in the tray, still a mystery until broken open
+        // landed — pops out to regular size, spinning in the tray with its name
+        // over it, ready to grab
         if (this.prizeBox) {
           this.prizeBox.position.copy(TRAY_POS)
-          this.prizeBox.rotation.set(0, Math.random() * Math.PI, 0)
+          this.prizeBox.rotation.set(0, 0, 0)
+          this.prizeBox.scale.setScalar(TROPHY_SCALE)
         }
         this.trayBox = this.prizeBox
         this.prizeBox = null
@@ -451,7 +473,9 @@ export class MysteryBox {
         this.updateCable()
         this.onReveal?.()
         this.state = 'ready'
-        this.drawLabel('PRIZE READY', 'BREAK IT OPEN')
+        this.drawLabel('PRIZE READY', this.offered?.name ?? '')
+        this.drawTrayLabel(this.offered?.name ?? '')
+        this.traySprite.visible = true
       }
     }
   }
