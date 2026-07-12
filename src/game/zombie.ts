@@ -130,8 +130,12 @@ export interface ZombieNav {
   colliders: Collider[]
   nextWaypoint(pos: THREE.Vector3, target: THREE.Vector3, id: number): THREE.Vector3
   inOpeningZone(pos: THREE.Vector3): boolean
-  /** The claw machine's position — a persistently-stuck zombie gets teleported near here. */
+  /** The claw machine's position — a persistently-stuck zombie gets teleported near here
+   *  if there's nowhere else to send it. */
   clawPos: THREE.Vector3
+  /** Every currently-active spawn point — a zombie that hasn't moved in a
+   *  while gets teleported to a random one of these instead. */
+  spawns: THREE.Vector3[]
 }
 
 interface Parts {
@@ -182,11 +186,7 @@ export class Zombie {
   private deathT = 0
   private scene: THREE.Scene
   private lastPos = new THREE.Vector3()
-  private stuckT = 0
-  private sideStep = 0 // seconds of lateral escape left
-  private sideSign = 1
-  private stuckCycles = 0 // consecutive failed strafe attempts — escalates to a hard unstick
-  private longStuckT = 0 // seconds of near-zero net progress — escalates past the hard unstick to a teleport
+  private stuckT = 0 // seconds of near-zero net progress — escalates to a respawn-elsewhere teleport
   private hop = 0 // vault height, eased
 
   // midget jump/latch internals
@@ -536,18 +536,6 @@ export class Zombie {
           mz += (oz / od) * 2.2
         }
       }
-      // anti-stuck: barely moving while chasing → briefly strafe sideways
-      // (not at a chokepoint — there, "not moving" just means it's pressed
-      // against a window/gate as intended, chipping away at it)
-      if (this.sideStep > 0) {
-        this.sideStep -= dt
-        if (!atChokepoint) {
-          const px = -mz * this.sideSign
-          const pz = mx * this.sideSign
-          mx = px
-          mz = pz
-        }
-      }
       pos.x += mx * dt
       this.resolve(nav.colliders, 'x')
       pos.z += mz * dt
@@ -556,37 +544,25 @@ export class Zombie {
       const moved = Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z)
       if (moved < this.speed * dt * 0.2) {
         this.stuckT += dt
-        this.longStuckT += dt
         if (this.stuckT > 1.0) {
           this.stuckT = 0
-          this.stuckCycles++
-          if (this.stuckCycles >= 4) {
-            // several strafe attempts in a row went nowhere — genuinely wedged
-            // (e.g. against a collider that shouldn't be there). Snap straight to
-            // the current waypoint rather than let it rot in place forever.
-            pos.x = wp.x
-            pos.z = wp.z
-            this.stuckCycles = 0
+          // a full second with no real progress — whatever's wrong with this
+          // spot (bad collider, bad routing, wedged against something), don't
+          // bother diagnosing it: just drop the zombie at a different active
+          // spawn point and let it try again from there. Falls back to the
+          // claw machine only if there's nowhere else registered right now.
+          if (nav.spawns.length > 0) {
+            const s = nav.spawns[Math.floor(Math.random() * nav.spawns.length)]
+            pos.x = s.x
+            pos.z = s.z
           } else {
-            this.sideStep = 0.6
-            this.sideSign = Math.random() < 0.5 ? 1 : -1
+            const ang = Math.random() * Math.PI * 2
+            pos.x = nav.clawPos.x + Math.cos(ang) * 2.5
+            pos.z = nav.clawPos.z + Math.sin(ang) * 2.5
           }
-        }
-        if (this.longStuckT > 8.0) {
-          // even the hard-unstick snap hasn't helped for a long stretch (e.g. wedged
-          // against something the snap keeps re-wedging into) — give up on the
-          // current spot entirely and respawn it near the claw machine instead.
-          const ang = Math.random() * Math.PI * 2
-          pos.x = nav.clawPos.x + Math.cos(ang) * 2.5
-          pos.z = nav.clawPos.z + Math.sin(ang) * 2.5
-          this.longStuckT = 0
-          this.stuckT = 0
-          this.stuckCycles = 0
         }
       } else {
         this.stuckT = Math.max(0, this.stuckT - dt * 2)
-        this.longStuckT = Math.max(0, this.longStuckT - dt * 2)
-        this.stuckCycles = 0
       }
       this.lastPos.copy(pos)
 
