@@ -628,6 +628,75 @@ body {
   pointer-events: none;
 }
 
+#compass {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 18px);
+  top: calc(env(safe-area-inset-top) + 14px);
+  width: 64px;
+  height: 64px;
+}
+
+#compass-dial {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(132, 255, 90, 0.35);
+  background: rgba(10, 16, 10, 0.45);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4) inset;
+}
+
+#compass-dial span {
+  position: absolute;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--bone);
+  text-shadow: 0 0 6px rgba(132, 255, 90, 0.5);
+}
+
+#compass-dial .n {
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#compass-dial .s {
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-dim);
+  text-shadow: none;
+}
+
+#compass-dial .e {
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  text-shadow: none;
+}
+
+#compass-dial .w {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  text-shadow: none;
+}
+
+#compass-pointer {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid var(--blood-bright);
+  filter: drop-shadow(0 0 3px rgba(224, 32, 32, 0.6));
+}
+
 #wave-banner {
   position: absolute;
   left: 50%;

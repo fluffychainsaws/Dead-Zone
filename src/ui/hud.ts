@@ -17,7 +17,9 @@ export class Hud {
   private scopeEl: HTMLElement
   private midgetEl: HTMLElement
   private lightEl: HTMLElement
+  private compassDialEl: HTMLElement
   private lastLight = ''
+  private lastCompassDeg = NaN
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private hitTimer: ReturnType<typeof setTimeout> | null = null
   // last-written values — these setters run every frame, the DOM should not
@@ -40,6 +42,12 @@ export class Hud {
       </div>
       <div id="wave-label">WAVE <span id="wave-num">–</span></div>
       <div id="room-info"></div>
+      <div id="compass">
+        <div id="compass-dial">
+          <span class="n">N</span><span class="e">E</span><span class="s">S</span><span class="w">W</span>
+        </div>
+        <div id="compass-pointer"></div>
+      </div>
       <button id="pause-btn">☰</button>
       <div id="wave-banner"></div>
       <div id="health-bar"><div id="health-fill"></div></div>
@@ -71,6 +79,7 @@ export class Hud {
     this.scopeEl = this.root.querySelector('#scope-overlay')!
     this.midgetEl = this.root.querySelector('#midget-overlay')!
     this.lightEl = this.root.querySelector('#light-status')!
+    this.compassDialEl = this.root.querySelector('#compass-dial')!
     this.root.querySelector('#pause-btn')!.addEventListener('click', () => this.onPause?.())
   }
 
@@ -203,6 +212,15 @@ export class Hud {
     this.healthFill.style.width = `${frac * 100}%`
     this.healthFill.classList.toggle('critical', frac < 0.35)
     this.vignetteEl.style.opacity = String(Math.min(0.92, base + (recentlyHit ? 0.45 : 0)))
+  }
+
+  /** Rotates the compass dial so the direction the player currently faces
+   *  sits under the fixed pointer — the classic "rotating tape" compass. */
+  setCompass(yaw: number) {
+    const deg = (yaw * 180) / Math.PI
+    if (Math.abs(deg - this.lastCompassDeg) < 0.1) return
+    this.lastCompassDeg = deg
+    this.compassDialEl.style.transform = `rotate(${deg}deg)`
   }
 
   setWave(wave: number) {

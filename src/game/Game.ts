@@ -1410,6 +1410,7 @@ export class Game {
       this.hud.setReloadProgress(this.weapon.reloadProgress)
       this.hud.setWeaponName(this.weapon.def.name)
       this.hud.setHealth(this.player.hp, this.player.maxHp, this.player.recentlyHit)
+      this.hud.setCompass(this.player.yaw)
     } else {
       // dead: keep rendering; host keeps simulating so spectators see the end
       if (this.netMode !== 'client') {
