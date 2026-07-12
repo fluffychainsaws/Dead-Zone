@@ -110,15 +110,16 @@ const COURT_X1 = COURT_X0 + (LAB_X1 - LAB_X0) / 2 // half The Lab's width
 const COURT_Z0 = -35
 const COURT_Z1 = COURT_Z0 + 24 // half The Lab's depth
 const COURT_FENCE_H = 3.2
-// The east/south fence runs have no zombie collider at all (zombies climb
-// or dig through anywhere along them), which means crowd/flock-separation
-// pressure can shove a zombie past the fence line with nothing to stop it
-// until the world boundary wall. Collision resolve() can't let an entity
-// that ends up on the wrong (outer) side of a wall cross back through it —
-// it just gets pushed back out every frame, permanently — so that boundary
-// needs to sit far enough out that ordinary crowd pressure (now capped, see
-// the zombie separation code) can never realistically reach it.
-const COURT_EAST_BUFFER = 18
+// Both the courtyard's east/south fence runs and the lab's spawn tunnels are
+// zombie-passable with no collider at all (zombies climb/dig/crawl through
+// anywhere along them), which means crowd/flock-separation pressure can
+// shove a zombie past the opening with nothing to stop it until the world
+// boundary wall. Collision resolve() can't let an entity that ends up on
+// the wrong (outer) side of a wall cross back through it — it just gets
+// pushed back out every frame, permanently — so every such boundary needs
+// to sit far enough out that ordinary crowd pressure (now capped, see the
+// zombie separation code) can never realistically reach it.
+const WORLD_EDGE_BUFFER = 18
 const TOWER_H = 6.5 // taller than the fence
 const TOWER_R = 2.2
 
@@ -193,10 +194,14 @@ export class Arena {
     // invisible world edge so nobody sprints off into the fog (wraps jail + lab
     // + the yard). Kept well clear of the lab's tunnel spawn points
     // (LAB_Z0/LAB_X0 - TUNNEL_SPAWN_OFF) — this used to sit right on top of
-    // them, trapping freshly-spawned zombies against it.
-    const frameX0 = LAB_X0 - TUNNEL_SPAWN_OFF - 3
-    const frameZ0 = LAB_Z0 - TUNNEL_SPAWN_OFF - 3
-    const frameX1 = COURT_X1 + COURT_EAST_BUFFER // extended east to clear the new yard, with room to spare
+    // them, trapping freshly-spawned zombies against it. Tunnels are
+    // zombie-passable the same way the courtyard fence is (see
+    // WORLD_EDGE_BUFFER above), so they carry the same crowd-pressure risk;
+    // using the same wide buffer here too, for free since it's already
+    // beyond the fog's draw distance either way.
+    const frameX0 = LAB_X0 - TUNNEL_SPAWN_OFF - WORLD_EDGE_BUFFER
+    const frameZ0 = LAB_Z0 - TUNNEL_SPAWN_OFF - WORLD_EDGE_BUFFER
+    const frameX1 = COURT_X1 + WORLD_EDGE_BUFFER // extended east to clear the new yard, with room to spare
     const bounds: Collider[] = [
       { minX: frameX0, maxX: frameX1, minZ: frameZ0, maxZ: frameZ0 + 2 }, // far north
       { minX: frameX0, maxX: frameX1, minZ: 34, maxZ: 36 }, // far south
@@ -1011,10 +1016,10 @@ export class Arena {
     // which reads as broken rather than "outside". Asymmetric on purpose:
     // stops right at the building's own east wall (X1) on the west side so
     // it doesn't poke into the building's floor, but reaches all the way to
-    // the world boundary on the east side (see COURT_EAST_BUFFER below) —
+    // the world boundary on the east side (see WORLD_EDGE_BUFFER below) —
     // a plain "w + N" symmetric width can't satisfy both at once. ----
     const apronX0 = X1
-    const apronX1 = COURT_X1 + COURT_EAST_BUFFER - 2 // inner face of the boundary wall
+    const apronX1 = COURT_X1 + WORLD_EDGE_BUFFER - 2 // inner face of the boundary wall
     this.addFlatMesh((apronX0 + apronX1) / 2, 0.008, cz, apronX1 - apronX0, d + 16, dirtMat, -Math.PI / 2)
 
     // ---- short corridor connecting the new door back to the yard — dirt
