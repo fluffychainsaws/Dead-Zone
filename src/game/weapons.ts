@@ -1052,10 +1052,12 @@ export function buildViewmodel(defId: string): THREE.Group {
     const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.13), skin)
     leftHand.position.set(0, 0, -0.06)
     leftArm.add(leftHand)
-    // angled in from the left/outside instead of running straight back parallel
-    // to the barrel — reads as a support hand actually reaching across for the
-    // grip rather than a forearm floating directly underneath it
-    leftArm.rotation.y = 0.65
+    // angled in toward the grip instead of running straight back parallel to
+    // the barrel — reads as a support hand actually reaching across for the
+    // grip rather than a forearm floating directly underneath it. Positive
+    // here would swing the hand-end out and the elbow-end in instead — a
+    // backwards-looking bend — since the hand sits at the forearm's -z end.
+    leftArm.rotation.y = -0.65
     leftArm.position.set(bottomLoad ? -0.14 : -0.17, bottomLoad ? -0.13 : -0.06, bottomLoad ? 0.05 : -0.14)
     g.add(leftArm)
     g.userData.leftArm = leftArm

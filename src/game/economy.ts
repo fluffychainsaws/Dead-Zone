@@ -111,15 +111,7 @@ export class Economy {
       display.position.set(x, 0, z)
       display.rotation.y = yaw
 
-      // wooden mounting board, flush against the wall
-      const board = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 1.3, 1.5),
-        new THREE.MeshLambertMaterial({ color: 0x3a2c1c }),
-      )
-      board.position.set(-0.03, 1.5, 0)
-      display.add(board)
-
-      // mounted upright against the board — sights to the ceiling, muzzle
+      // mounted upright on the wall — sights to the ceiling, muzzle
       // toward a viewer's right hand — like a rack display —
       // buildViewmodel() bundles in first-person hands, which read as a
       // pair of disembodied arms once the gun is unhooked from the player's
