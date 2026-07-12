@@ -538,26 +538,39 @@ export class Zombie {
       // below the slowest zombie's speed floor (plain zombies bottom out at
       // 1.5) so path-following always keeps a net-positive component toward
       // the target, no matter how packed the crowd gets.
-      let sepX = 0
-      let sepZ = 0
-      for (const o of others) {
-        if (o === this || !o.alive) continue
-        const ox = pos.x - o.group.position.x
-        const oz = pos.z - o.group.position.z
-        const od = Math.hypot(ox, oz)
-        if (od > 0.01 && od < 0.9) {
-          sepX += (ox / od) * 2.2
-          sepZ += (oz / od) * 2.2
+      //
+      // At a chokepoint specifically (a window, gate, or breach), skip
+      // separation entirely instead of just capping it — a real crowd
+      // funneling through a narrow gap queues up single-file, it doesn't
+      // jostle sideways. A boarded window is the sharpest case: its
+      // collider only clears once boards are chipped down by a zombie
+      // that's actually within range of its center, so getting shoved off
+      // to the side by the zombie behind it can push it past the window's
+      // solid flanking wall entirely, wedging it there for good since nothing
+      // is chipping boards from that spot and whisker-steering is already
+      // suppressed this close to the opening.
+      if (!atChokepoint) {
+        let sepX = 0
+        let sepZ = 0
+        for (const o of others) {
+          if (o === this || !o.alive) continue
+          const ox = pos.x - o.group.position.x
+          const oz = pos.z - o.group.position.z
+          const od = Math.hypot(ox, oz)
+          if (od > 0.01 && od < 0.9) {
+            sepX += (ox / od) * 2.2
+            sepZ += (oz / od) * 2.2
+          }
         }
+        const sepMag = Math.hypot(sepX, sepZ)
+        const sepCap = 1.2
+        if (sepMag > sepCap) {
+          sepX = (sepX / sepMag) * sepCap
+          sepZ = (sepZ / sepMag) * sepCap
+        }
+        mx += sepX
+        mz += sepZ
       }
-      const sepMag = Math.hypot(sepX, sepZ)
-      const sepCap = 1.2
-      if (sepMag > sepCap) {
-        sepX = (sepX / sepMag) * sepCap
-        sepZ = (sepZ / sepMag) * sepCap
-      }
-      mx += sepX
-      mz += sepZ
       pos.x += mx * dt
       this.resolve(nav.colliders, 'x')
       pos.z += mz * dt

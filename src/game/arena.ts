@@ -1041,6 +1041,28 @@ export class Arena {
         height: H,
       })
     }
+    // the corridor's own exterior-side wall (z=-11+GATE_W/2+0.15, i.e. the
+    // "outside" one, south of the yard's own boundary at z=-11) ends flush
+    // at corridorClearX, but the yard's south fence starts at that same X
+    // sitting further over at z=-11 — the two never actually touch, leaving
+    // an unfenced notch open straight into the exterior apron right where
+    // the corridor lets out. A short connecting fence run seals it.
+    {
+      const notchZ0 = -11
+      const notchZ1 = -11 + (GATE_W / 2 + 0.15)
+      const seg = new THREE.BoxGeometry(0.24, COURT_FENCE_H, notchZ1 - notchZ0)
+      seg.translate(corridorClearX, COURT_FENCE_H / 2, (notchZ0 + notchZ1) / 2)
+      this.addStatic(seg, this.fenceMat)
+      const c: Collider = {
+        minX: corridorClearX - 0.12,
+        maxX: corridorClearX + 0.12,
+        minZ: notchZ0,
+        maxZ: notchZ1,
+        height: COURT_FENCE_H,
+      }
+      this.playerColliders.push(c)
+      this.zombieColliders.push(c)
+    }
 
     // ---- grass ground, its own patch since it sits outside the base map ----
     this.addFlatMesh(cx, 0.015, cz, w, d, this.grassMat, -Math.PI / 2)
