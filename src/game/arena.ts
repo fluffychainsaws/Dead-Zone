@@ -1128,13 +1128,34 @@ export class Arena {
     // fence used to just stop instead of closing back up, leaving the whole
     // stretch north of the corridor completely unwalled: anyone who crossed
     // through the corridor could walk straight around the outside of the
-    // fence from there, right out of the map. Extending the run's far end
-    // past the corridor's own wall line seals that corner shut.
+    // fence from there, right out of the map. That corner only needs
+    // sealing for the PLAYER, though — zombies don't wander the fence
+    // exterior looking for exploits, they just path straight for the real
+    // door. Letting buildFenceSide auto-generate that stub the normal way
+    // made it a zombie collider too, sitting right at the doorway's own
+    // edge — narrow enough to go unnoticed visually, wide enough to catch
+    // whisker-steering and have a zombie bounce off it right at the
+    // threshold instead of walking through, reading as "hits an invisible
+    // wall, won't enter the yard." Built explicitly below as player-only
+    // instead, matching the corridor's own side walls.
+    const gapZ1 = -11 + (GATE_W / 2 + 0.2)
     const corridorNorthZ = -11 + GATE_W / 2 + 0.15 + 0.2
     buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
     buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, true) // east — zombies climb anywhere along it
     buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, true) // south — zombies dig under anywhere along it
-    buildFenceSide(false, COURT_X0, COURT_Z0, corridorNorthZ, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
+    buildFenceSide(false, COURT_X0, COURT_Z0, gapZ1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
+    if (corridorNorthZ > gapZ1) {
+      const seg = new THREE.BoxGeometry(0.24, COURT_FENCE_H, corridorNorthZ - gapZ1)
+      seg.translate(COURT_X0, COURT_FENCE_H / 2, (gapZ1 + corridorNorthZ) / 2)
+      this.addStatic(seg, this.fenceMat)
+      this.playerColliders.push({
+        minX: COURT_X0 - 0.12,
+        maxX: COURT_X0 + 0.12,
+        minZ: gapZ1,
+        maxZ: corridorNorthZ,
+        height: COURT_FENCE_H,
+      })
+    }
 
     // the fence's west gap above is a real, always-open walkthrough (unlike
     // the climb/dig spots below, which are zombie-only tricks) — register it
