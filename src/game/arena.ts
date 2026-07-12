@@ -959,8 +959,10 @@ export class Arena {
     })
 
     // ---- light-source vendors, right at the bottom of the stairs ----
-    this.buildItemStation(FLASHLIGHT_POS.x, FLASHLIGHT_POS.z, 'FLASHLIGHT', '20000', GLOW_GOLD)
-    this.buildItemStation(NVG_POS.x, NVG_POS.z, 'NIGHT VISION', '40000', GLOW_CYAN)
+    // TODO: bump these back up (20000 / 40000) once testing is done — must
+    // stay in sync with flashlightPrice/nvgPrice in Game.ts's handleLightBuys
+    this.buildItemStation(FLASHLIGHT_POS.x, FLASHLIGHT_POS.z, 'FLASHLIGHT', '100', GLOW_GOLD)
+    this.buildItemStation(NVG_POS.x, NVG_POS.z, 'NIGHT VISION', '100', GLOW_CYAN)
   }
 
   /** The Prison Yard — an open-air courtyard where prisoners were let out.
