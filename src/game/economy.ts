@@ -40,7 +40,7 @@ const STATIONS: Array<{ weapon: string; price: number; pos: number; facing: Faci
   { weapon: 'grinder', price: 3000, pos: 0, facing: 'north' }, // armory center — belt-fed
 ]
 
-export function makeLabelSprite(lines: string[]): THREE.Sprite {
+function labelTexture(lines: string[]): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = 512
   c.height = 128
@@ -54,12 +54,35 @@ export function makeLabelSprite(lines: string[]): THREE.Sprite {
   ctx.font = 'bold 34px Impact, Arial Black, sans-serif'
   ctx.fillStyle = '#e0c020'
   ctx.fillText(lines[1], 256, 100)
-  const tex = new THREE.CanvasTexture(c)
+  return new THREE.CanvasTexture(c)
+}
+
+/** Always faces the camera — reads fine from anywhere, but drifts off of
+ *  whatever surface it's meant to be labelling once you're off to the side. */
+export function makeLabelSprite(lines: string[]): THREE.Sprite {
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+    new THREE.SpriteMaterial({ map: labelTexture(lines), transparent: true, depthWrite: false }),
   )
   sprite.scale.set(3.4, 0.85, 1)
   return sprite
+}
+
+/** Flat plane instead of a billboard — stays glued to the wall it's mounted
+ *  on rather than swivelling to face the camera, so it doesn't appear to
+ *  slide into the wall when viewed from an angle. Faces local +X; the caller
+ *  is expected to add it to a group that's already rotated to match its wall. */
+export function makeLabelPlane(lines: string[]): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.4, 0.85),
+    new THREE.MeshBasicMaterial({
+      map: labelTexture(lines),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  )
+  mesh.rotation.y = Math.PI / 2
+  return mesh
 }
 
 export class Economy {
@@ -151,9 +174,11 @@ export class Economy {
       gun.name = 'display-gun'
       display.add(gun)
 
-      // sprites always billboard toward the camera on their own regardless of
-      // parent rotation, so no extra facing logic needed here
-      const label = makeLabelSprite([def.name, `${s.price}`])
+      // a flat plane, not a sprite — stays flush with the wall instead of
+      // swivelling to face the player, so it doesn't read as cutting into
+      // the wall at an angle. display is already rotated to match its wall,
+      // so the plane just needs to face outward (its own local +X).
+      const label = makeLabelPlane([def.name, `${s.price}`])
       label.position.set(0.1, 2.5, 0)
       display.add(label)
 
