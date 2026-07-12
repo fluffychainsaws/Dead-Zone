@@ -1064,7 +1064,7 @@ export class Arena {
       from: number,
       to: number,
       trueGap: { at: number; half: number } | null = null, // real opening, e.g. the corridor door
-      climbGap: { at: number; half: number } | null = null, // fence stands, but zombies pass through here
+      zombiePassable = false, // whole run stands (blocks the player) but has NO zombie collider at all
     ) => {
       const ranges: Array<[number, number]> = []
       if (trueGap === null) ranges.push([from, to])
@@ -1075,29 +1075,15 @@ export class Arena {
       for (const [a, b] of ranges) {
         if (b - a < 0.1) continue
         buildFenceRun(isX, fixed, a, b)
-        this.playerColliders.push({
+        const c: Collider = {
           minX: isX ? a : fixed - 0.12,
           maxX: isX ? b : fixed + 0.12,
           minZ: isX ? fixed - 0.12 : a,
           maxZ: isX ? fixed + 0.12 : b,
           height: COURT_FENCE_H,
-        })
-        const zRanges: Array<[number, number]> = []
-        if (climbGap === null) zRanges.push([a, b])
-        else {
-          if (climbGap.at - climbGap.half > a) zRanges.push([a, Math.min(b, climbGap.at - climbGap.half)])
-          if (climbGap.at + climbGap.half < b) zRanges.push([Math.max(a, climbGap.at + climbGap.half), b])
         }
-        for (const [za, zb] of zRanges) {
-          if (zb - za < 0.1) continue
-          this.zombieColliders.push({
-            minX: isX ? za : fixed - 0.12,
-            maxX: isX ? zb : fixed + 0.12,
-            minZ: isX ? fixed - 0.12 : za,
-            maxZ: isX ? fixed + 0.12 : zb,
-            height: COURT_FENCE_H,
-          })
-        }
+        this.playerColliders.push(c)
+        if (!zombiePassable) this.zombieColliders.push(c)
       }
     }
     const digAtX = cx - 6
@@ -1116,8 +1102,8 @@ export class Arena {
     // past the corridor's own wall line seals that corner shut.
     const corridorNorthZ = -11 + GATE_W / 2 + 0.15 + 0.2
     buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
-    buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, { at: cz, half: 2.0 }) // east — climb spot
-    buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, { at: digAtX, half: 2.0 }) // south — dig-under spot
+    buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, true) // east — zombies climb anywhere along it
+    buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, true) // south — zombies dig under anywhere along it
     buildFenceSide(false, COURT_X0, COURT_Z0, corridorNorthZ, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
 
     // the fence's west gap above is a real, always-open walkthrough (unlike
@@ -1137,35 +1123,38 @@ export class Arena {
       meshes: [],
     })
 
-    // zombies climb the fence here — it visibly stands (and still blocks the
-    // player) but the zombie collider is gapped at exactly this spot. The
-    // opening's zone rectangle is kept slightly NARROWER than the actual
-    // collider-free gap (2.0) — if it were wider, a zombie nudged sideways by
-    // flock separation could sit inside the zone (whisker-steering suppressed,
-    // since it's "meant" to be a chokepoint) while still outside the passable
-    // gap and blocked by solid fence — stuck for good, unable to route around
-    // because the zone told it not to bother.
-    this.openings.push({
-      roomId: 5,
-      outside: new THREE.Vector3(COURT_X1 + 2.0, 0, cz),
-      inside: new THREE.Vector3(COURT_X1 - 2.0, 0, cz),
-      zone: { minX: COURT_X1 - 3, maxX: COURT_X1 + 3, minZ: cz - 1.8, maxZ: cz + 1.8 },
-    })
-
-    // zombies dig under the fence here — same trick, different spot/flavor,
-    // with a couple of dirt piles flanking the gap for the eye
-    for (const side of [-1, 1]) {
-      const mound = new THREE.SphereGeometry(0.7, 8, 6)
-      mound.scale(1, 0.4, 1)
-      mound.translate(digAtX + side * 1.3, 0.1, COURT_Z1 + side * 0.4)
-      this.addStatic(mound, dirtMat)
+    // Zombies climb the east fence and dig under the south fence — but with
+    // NO zombie collider anywhere along either entire run (see zombiePassable
+    // above), not a narrow gap in an otherwise-solid run. A narrow gap is
+    // still a chokepoint once a real wave's worth of zombies (a dozen-plus)
+    // converges on it at once — verified via simulation that even a gap
+    // tightened to sit within its own zone rectangle still jammed most of a
+    // 20-zombie crowd outside the fence. With nothing to physically block
+    // them anywhere along either side, there's no chokepoint left to jam at
+    // regardless of crowd size. Each side gets 3 spread-out spawn points
+    // instead of one, so a wave doesn't even converge on a single spot.
+    for (const oz of [cz - 6, cz, cz + 6]) {
+      this.openings.push({
+        roomId: 5,
+        outside: new THREE.Vector3(COURT_X1 + 2.0, 0, oz),
+        inside: new THREE.Vector3(COURT_X1 - 2.0, 0, oz),
+        zone: { minX: COURT_X1 - 3, maxX: COURT_X1 + 3, minZ: oz - 3, maxZ: oz + 3 },
+      })
     }
-    this.openings.push({
-      roomId: 5,
-      outside: new THREE.Vector3(digAtX, 0, COURT_Z1 + 2.0),
-      inside: new THREE.Vector3(digAtX, 0, COURT_Z1 - 2.0),
-      zone: { minX: digAtX - 1.8, maxX: digAtX + 1.8, minZ: COURT_Z1 - 3, maxZ: COURT_Z1 + 3 },
-    })
+    for (const mx of [digAtX - 8, digAtX, digAtX + 8]) {
+      for (const side of [-1, 1]) {
+        const mound = new THREE.SphereGeometry(0.7, 8, 6)
+        mound.scale(1, 0.4, 1)
+        mound.translate(mx + side * 1.3, 0.1, COURT_Z1 + side * 0.4)
+        this.addStatic(mound, dirtMat)
+      }
+      this.openings.push({
+        roomId: 5,
+        outside: new THREE.Vector3(mx, 0, COURT_Z1 + 2.0),
+        inside: new THREE.Vector3(mx, 0, COURT_Z1 - 2.0),
+        zone: { minX: mx - 3, maxX: mx + 3, minZ: COURT_Z1 - 3, maxZ: COURT_Z1 + 3 },
+      })
+    }
 
     // a manhole zombies crawl straight up out of, already inside the fence line
     const manholeX = cx + w * 0.22
