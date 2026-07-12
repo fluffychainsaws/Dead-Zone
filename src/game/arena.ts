@@ -973,9 +973,18 @@ export class Arena {
     const cz = (COURT_Z0 + COURT_Z1) / 2
     const w = COURT_X1 - COURT_X0
     const d = COURT_Z1 - COURT_Z0
+    const dirtMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 })
 
-    // ---- short corridor connecting the new door back to the yard ----
-    this.addFlatMesh(X1 + (COURT_X0 - X1) / 2, 0.02, -11, COURT_X0 - X1, GATE_W, this.labFloorMat, -Math.PI / 2)
+    // ---- bare dirt apron beyond the fence line, well past where zombies
+    // climb/dig/crawl in from — otherwise that ground is untextured void,
+    // which reads as broken rather than "outside". Sized to stop right at
+    // the building's own east wall (X1) on the west side so it doesn't
+    // poke into the building's floor. ----
+    this.addFlatMesh(cx, 0.008, cz, w + 20, d + 16, dirtMat, -Math.PI / 2)
+
+    // ---- short corridor connecting the new door back to the yard — dirt
+    // underfoot too, it's the same open-air walk out to the yard ----
+    this.addFlatMesh(X1 + (COURT_X0 - X1) / 2, 0.02, -11, COURT_X0 - X1, GATE_W, dirtMat, -Math.PI / 2)
     for (const side of [-1, 1]) {
       const wallZ = -11 + side * (GATE_W / 2 + 0.15)
       const seg = new THREE.BoxGeometry(COURT_X0 - X1, H, 0.3)
@@ -1126,7 +1135,6 @@ export class Arena {
 
     // zombies dig under the fence here — same trick, different spot/flavor,
     // with a couple of dirt piles flanking the gap for the eye
-    const dirtMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 })
     for (const side of [-1, 1]) {
       const mound = new THREE.SphereGeometry(0.7, 8, 6)
       mound.scale(1, 0.4, 1)
@@ -1543,6 +1551,24 @@ export class Arena {
       if (i >= 0) this.colliderMeshes.splice(i, 1)
     }
     for (const rid of d.rooms) this.rooms[rid].open = true
+    // cascade through any other door that's already open (e.g. the yard's
+    // permanently-open fence gap beyond the real, purchasable gate) so a
+    // room on the far side of one of those opens too, instead of staying
+    // "closed" — and its spawns dead — forever because nothing ever calls
+    // openDoor() on a door that was already open from the start
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const other of this.doors) {
+        if (!other.open) continue
+        const [a, b] = other.rooms
+        if (this.rooms[a].open !== this.rooms[b].open) {
+          this.rooms[a].open = true
+          this.rooms[b].open = true
+          changed = true
+        }
+      }
+    }
     return true
   }
 
