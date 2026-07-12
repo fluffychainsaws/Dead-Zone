@@ -977,6 +977,13 @@ export class Arena {
     const w = COURT_X1 - COURT_X0
     const d = COURT_Z1 - COURT_Z0
     const dirtMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 })
+    // the south fence run (below) can't start right at the fence line — it
+    // has to leave the corridor's own width clear — so its collider-free
+    // stretch runs a bit past COURT_X0. The corridor's own walls need to
+    // reach exactly as far, or that stretch (fence gap on one side, no
+    // south fence yet on the other) is a pocket with no wall on any side:
+    // a gap you can just walk out of the map through.
+    const corridorClearX = COURT_X0 + GATE_W / 2 + 0.2
 
     // ---- bare dirt apron beyond the fence line, well past where zombies
     // climb/dig/crawl in from — otherwise that ground is untextured void,
@@ -986,16 +993,19 @@ export class Arena {
     this.addFlatMesh(cx, 0.008, cz, w + 20, d + 16, dirtMat, -Math.PI / 2)
 
     // ---- short corridor connecting the new door back to the yard — dirt
-    // underfoot too, it's the same open-air walk out to the yard ----
-    this.addFlatMesh(X1 + (COURT_X0 - X1) / 2, 0.02, -11, COURT_X0 - X1, GATE_W, dirtMat, -Math.PI / 2)
+    // underfoot too, it's the same open-air walk out to the yard. Walls
+    // run past COURT_X0 to corridorClearX so they seal flush against
+    // where the south fence run picks back up (see corridorClearX above). ----
+    const corridorLen = corridorClearX - X1
+    this.addFlatMesh(X1 + corridorLen / 2, 0.02, -11, corridorLen, GATE_W, dirtMat, -Math.PI / 2)
     for (const side of [-1, 1]) {
       const wallZ = -11 + side * (GATE_W / 2 + 0.15)
-      const seg = new THREE.BoxGeometry(COURT_X0 - X1, H, 0.3)
-      seg.translate(X1 + (COURT_X0 - X1) / 2, H / 2, wallZ)
+      const seg = new THREE.BoxGeometry(corridorLen, H, 0.3)
+      seg.translate(X1 + corridorLen / 2, H / 2, wallZ)
       this.addStatic(seg, this.wallMat)
       this.playerColliders.push({
         minX: X1,
-        maxX: COURT_X0,
+        maxX: corridorClearX,
         minZ: wallZ - 0.15,
         maxZ: wallZ + 0.15,
         height: H,
@@ -1092,17 +1102,23 @@ export class Arena {
     }
     const digAtX = cx - 6
     // the corridor door sits at z=-11, which is also COURT_Z1 — the corner
-    // where the west and south fence runs meet. The south run used to start
-    // right at COURT_X0, so it walled off that exact corner even though the
-    // west run's trueGap leaves it open: the two didn't line up, so the
-    // corridor dead-ended against solid fence for players and zombies alike.
-    // Starting the south run past the corridor's width leaves the corner
-    // clear on both sides, matching the west gap.
-    const corridorClearX = COURT_X0 + GATE_W / 2 + 0.2
+    // where the west and south fence runs meet. The south run starts past
+    // the corridor's width (corridorClearX, set above) instead of right at
+    // COURT_X0, leaving the corner clear on both sides to match the west
+    // gap — and the corridor's own walls now reach exactly that far too, so
+    // nothing has to line up by coincidence.
+    // the west run's own trueGap only opens exactly as wide as the corridor
+    // (z:[-12.7,-9.3]); past COURT_Z1(-11) — the corridor's north wall — the
+    // fence used to just stop instead of closing back up, leaving the whole
+    // stretch north of the corridor completely unwalled: anyone who crossed
+    // through the corridor could walk straight around the outside of the
+    // fence from there, right out of the map. Extending the run's far end
+    // past the corridor's own wall line seals that corner shut.
+    const corridorNorthZ = -11 + GATE_W / 2 + 0.15 + 0.2
     buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
     buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, { at: cz, half: 2.0 }) // east — climb spot
     buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, { at: digAtX, half: 2.0 }) // south — dig-under spot
-    buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
+    buildFenceSide(false, COURT_X0, COURT_Z0, corridorNorthZ, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
 
     // the fence's west gap above is a real, always-open walkthrough (unlike
     // the climb/dig spots below, which are zombie-only tricks) — register it
@@ -1287,7 +1303,9 @@ export class Arena {
       light.target = target
       this.scene.add(light)
 
-      const label = makeLabelSprite(['GUARD TOWER', '5000'])
+      // TODO: bump back up (5000) once testing is done — must stay in sync
+      // with the cost in Game.ts's handleTowerActivation
+      const label = makeLabelSprite(['GUARD TOWER', '100'])
       label.position.set(tx, TOWER_H + 2.4, tz)
       this.scene.add(label)
 

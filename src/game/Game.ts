@@ -786,7 +786,9 @@ export class Game {
     const tower = this.arena.nearestInactiveTower(this.player.pos)
     if (!tower) return false
     const key = this.input.isTouch ? 'USE' : '[E]'
-    const cost = 5000
+    // TODO: bump back up (5000) once testing is done — must stay in sync
+    // with the label text in arena.ts's guard tower build code
+    const cost = 100
     this.hud.setPrompt(`${key} ACTIVATE GUARD TOWER — ${cost}`)
     if (this.input.consumeInteract()) {
       if (this.economy.spend(cost)) {
