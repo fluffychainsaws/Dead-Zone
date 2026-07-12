@@ -560,11 +560,12 @@ export class Arena {
       rooms: [number, number]
       style?: 'bars' | 'double-door'
     }> = [
-      { name: 'CELL DOOR', cost: 750, x: -20, z: 0, axis: 'x', rooms: [0, 1] },
-      { name: 'SECURITY GATE', cost: 1250, x: 20, z: 0, axis: 'x', rooms: [0, 2] },
-      { name: 'ARMORY GATE', cost: 2000, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
-      { name: 'ARMORY GATE', cost: 2000, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
-      { name: 'THE LAB', cost: 1000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
+      // TODO: bump these back up (750 / 1250 / 2000 / 2000 / 1000) once testing is done
+      { name: 'CELL DOOR', cost: 100, x: -20, z: 0, axis: 'x', rooms: [0, 1] },
+      { name: 'SECURITY GATE', cost: 100, x: 20, z: 0, axis: 'x', rooms: [0, 2] },
+      { name: 'ARMORY GATE', cost: 100, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
+      { name: 'ARMORY GATE', cost: 100, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
+      { name: 'THE LAB', cost: 100, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
       { name: 'PRISON YARD', cost: 100, x: X1, z: -11, axis: 'z', rooms: [2, 6], style: 'double-door' }, // TODO: bump back up once testing is done
     ]
     defs.forEach((d, id) => {
