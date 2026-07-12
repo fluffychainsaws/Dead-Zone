@@ -140,7 +140,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   grinder: {
     id: 'grinder',
-    name: 'M1919 GRINDER',
+    name: 'M240 SAW',
     damage: 38,
     headshotMult: 2.4,
     rpm: 550,
@@ -900,23 +900,59 @@ export function buildViewmodel(defId: string): THREE.Group {
     flameGrip.rotation.x = 0.3
     g.add(flameGrip)
   } else if (kind === 'mg') {
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.66, 8), dark)
+    // M240-style SAW: black metal barrel/receiver internals, FDE (tan)
+    // furniture, folding bipod up front, belt-fed (no magazine)
+    const tan = new THREE.MeshLambertMaterial({ color: 0xc9a876 })
+    const flashHider = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.07, 8), dark)
+    flashHider.rotation.x = Math.PI / 2
+    flashHider.position.set(0, 0.03, -0.75)
+    g.add(flashHider)
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.026, 0.44, 8), dark)
     barrel.rotation.x = Math.PI / 2
-    barrel.position.set(0, 0.03, -0.42)
+    barrel.position.set(0, 0.03, -0.5)
     g.add(barrel)
-    const jacket = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), dark)
-    jacket.rotation.x = Math.PI / 2
-    jacket.position.set(0, 0.03, -0.25)
-    g.add(jacket)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.4), dark)
-    g.add(body)
-    addRedDot(g, dark, 0, 0.1, -0.08)
-    const beltBox = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.18), grip)
-    beltBox.position.set(0, -0.14, -0.02)
+    // gas block / front sight post, clamped around the barrel
+    const gasBlock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.05), dark)
+    gasBlock.position.set(0, 0.035, -0.58)
+    g.add(gasBlock)
+    // bipod, folded down and forward
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.24, 6), dark)
+      leg.position.set(side * 0.05, -0.06, -0.54)
+      leg.rotation.z = side * 0.3
+      leg.rotation.x = -0.15
+      g.add(leg)
+    }
+    const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.28, 8), tan)
+    handguard.rotation.x = Math.PI / 2
+    handguard.position.set(0, 0.025, -0.32)
+    g.add(handguard)
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.09, 0.36), tan)
+    receiver.position.set(0, 0.03, -0.01)
+    g.add(receiver)
+    const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.025, 0.32), dark)
+    topRail.position.set(0, 0.08, -0.01)
+    g.add(topRail)
+    // carry handle up by the barrel breach, same spot a real SAW's
+    // quick-change handle sits, rather than stacked under the sight
+    const carryHandle = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.05, 0.02), dark)
+    carryHandle.position.set(0, 0.088, -0.24)
+    g.add(carryHandle)
+    addRedDot(g, dark, 0, 0.13, -0.01)
+    const grip240 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.055), tan)
+    grip240.position.set(0, -0.09, 0.07)
+    grip240.rotation.x = -0.3
+    g.add(grip240)
+    // ammo box hanging off the belt-feed tray — no magazine on a belt-fed gun
+    const beltBox = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.1), dark)
+    beltBox.position.set(0, -0.06, -0.06)
     g.add(beltBox)
-    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.2), wood)
-    butt.position.set(0, -0.02, 0.28)
-    g.add(butt)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.08, 0.4), tan)
+    stock.position.set(0, 0.02, 0.34)
+    g.add(stock)
+    const buttPad = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.03), dark)
+    buttPad.position.set(0, 0.02, 0.54)
+    g.add(buttPad)
   } else if (kind === 'sniper') {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.85, 8), dark)
     barrel.rotation.x = Math.PI / 2
