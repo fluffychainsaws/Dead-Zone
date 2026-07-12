@@ -177,8 +177,12 @@ export class Economy {
       // a flat plane, not a sprite — stays flush with the wall instead of
       // swivelling to face the player, so it doesn't read as cutting into
       // the wall at an angle. display is already rotated to match its wall,
-      // so the plane just needs to face outward (its own local +X).
+      // so the plane just needs to face outward (its own local +X) — but
+      // which way is "outward" text-reading-wise still flips between the
+      // two wall-facing families, same as gunYaw above, or north/south
+      // stations render their name and price mirrored.
       const label = makeLabelPlane([def.name, `${s.price}`])
+      label.rotation.y += gunYaw
       label.position.set(0.1, 2.5, 0)
       display.add(label)
 
