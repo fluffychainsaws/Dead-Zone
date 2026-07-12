@@ -1,6 +1,5 @@
 import * as THREE from 'three'
 import { WEAPONS, buildViewmodel, type WeaponDef } from './weapons'
-import { glowSprite, GLOW_GOLD } from './effects'
 
 export const POINTS = {
   hit: 10,
@@ -130,6 +129,26 @@ export class Economy {
       const rightArm = gun.userData.rightArm as THREE.Object3D | undefined
       if (leftArm) gun.remove(leftArm)
       if (rightArm) gun.remove(rightArm)
+
+      // a white outline traced around the gun's own silhouette, computed
+      // while it's still untransformed so the box lines up regardless of
+      // this station's position/rotation/scale — added as a child of the
+      // gun itself so it rides along with all three. buildViewmodel() bakes
+      // in a first-person screen-space offset on the root group, which has
+      // to be zeroed first or Box3 measures around the wrong center; gun's
+      // matrixWorld also needs a forced refresh since it was never added to
+      // a scene yet.
+      gun.position.set(0, 0, 0)
+      gun.updateMatrixWorld(true)
+      const box = new THREE.Box3().setFromObject(gun)
+      const outlineSize = box.getSize(new THREE.Vector3()).addScalar(0.03)
+      const outline = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(outlineSize.x, outlineSize.y, outlineSize.z)),
+        new THREE.LineBasicMaterial({ color: 0xffffff }),
+      )
+      outline.position.copy(box.getCenter(new THREE.Vector3()))
+      gun.add(outline)
+
       gun.position.set(0.08, 1.5, 0)
       // rotating only about the gun's own up axis keeps "up" pointing at the
       // ceiling no matter which wall it's mounted on — gunYaw just steers
@@ -145,10 +164,6 @@ export class Economy {
       const label = makeLabelSprite([def.name, `${s.price}`])
       label.position.set(0.1, 2.5, 0)
       display.add(label)
-
-      const glow = glowSprite(GLOW_GOLD, 2.2, 0.55)
-      glow.position.set(0.1, 1.6, 0)
-      display.add(glow)
 
       scene.add(display)
       this.stations.push({
