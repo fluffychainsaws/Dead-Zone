@@ -794,12 +794,24 @@ export class Arena {
       seg.translate(px, 1.8, pz)
       this.addStatic(seg, this.domeGlassMat)
       // a real glass wall now — blocks players and zombies alike, both funnel
-      // through the south gap same as any other solid obstacle
+      // through the south gap same as any other solid obstacle.
+      // The collider has to be the AABB of the segment's ACTUAL rotated
+      // footprint (radial half-width 0.5, tangential half-length 1.7), not a
+      // fixed square — a fixed +/-1.4 square is only right by coincidence at
+      // 45 degrees. At the cardinal-ish angles it undershoots the tangential
+      // length (leaving thin gaps between segments) while overshooting the
+      // radial thickness by up to 0.9 units both in and out — an invisible
+      // wall standing well clear of the visible glass, all the way around
+      // the dome's exterior (and interior).
+      const radialHalf = 0.5
+      const tangentHalf = 1.7
+      const halfX = Math.abs(Math.cos(a)) * radialHalf + Math.abs(Math.sin(a)) * tangentHalf
+      const halfZ = Math.abs(Math.sin(a)) * radialHalf + Math.abs(Math.cos(a)) * tangentHalf
       const domeCollider: Collider = {
-        minX: px - 1.4,
-        maxX: px + 1.4,
-        minZ: pz - 1.4,
-        maxZ: pz + 1.4,
+        minX: px - halfX,
+        maxX: px + halfX,
+        minZ: pz - halfZ,
+        maxZ: pz + halfZ,
         height: 3.6,
       }
       this.playerColliders.push(domeCollider)
