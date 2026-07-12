@@ -442,6 +442,17 @@ export class WeaponSystem {
       return []
     }
 
+    // still cycling from the last shot — don't touch the fire-press queue yet.
+    // consumeFirePress() decrements a counter every frame it's called, so
+    // checking cooldown AFTER consuming (the old order) silently ate queued
+    // clicks one per frame while on cooldown — a semi-auto gun like the
+    // M1911 (cooldown ~0.19s at 320rpm, ~11 frames at 60fps) could drain an
+    // entire burst of rapid clicks before the cooldown even cleared, well
+    // below the rate a fast clicker could actually keep up with.
+    if (this.cooldown > 0) {
+      this.applyViewmodelMotion(input.isTouch)
+      return []
+    }
     // mobile convenience: fire automatically whenever the reticle happens to rest on a
     // zombie, so players aren't forced to mash the fire button — the camera/aim itself
     // is never adjusted, so this is not an aim-assist
@@ -449,7 +460,7 @@ export class WeaponSystem {
     const wantsFire = w.def.auto
       ? (input.fireHeld || crosshairOnZombie) && !this.suppressAutoFire
       : input.consumeFirePress() || crosshairOnZombie
-    if (!wantsFire || this.cooldown > 0) {
+    if (!wantsFire) {
       this.applyViewmodelMotion(input.isTouch)
       return []
     }
