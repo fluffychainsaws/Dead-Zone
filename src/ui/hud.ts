@@ -30,7 +30,7 @@ export class Hud {
     this.root.id = 'hud'
     this.root.innerHTML = `
       <div id="vignette"></div>
-      <div id="version-badge">PHASE 23.1</div>
+      <div id="version-badge">PHASE 23.2</div>
       <div id="crosshair"></div>
       <div id="reload-bar"><div id="reload-bar-fill"></div></div>
       <div id="scope-overlay"><div class="lens"><div class="reticle"></div></div></div>
