@@ -79,26 +79,33 @@ export class Economy {
       let x: number
       let z: number
       let yaw: number
+      // muzzle-right roll (see below) that keeps the barrel pointing toward
+      // a viewer's right hand as they face this particular wall
+      let rollX: number
       switch (s.facing) {
         case 'west':
           x = X0 + WALL_T / 2 + STAND_OFF
           z = s.pos
           yaw = 0 // barrel already runs along Z, parallel to this wall
+          rollX = 0
           break
         case 'east':
           x = X1 - WALL_T / 2 - STAND_OFF
           z = s.pos
           yaw = Math.PI
+          rollX = 0
           break
         case 'north':
           x = s.pos
           z = Z0 + WALL_T / 2 + STAND_OFF
           yaw = Math.PI / 2 // turn the barrel to run along X instead
+          rollX = Math.PI
           break
         case 'south':
           x = s.pos
           z = Z1 - WALL_T / 2 - STAND_OFF
           yaw = -Math.PI / 2
+          rollX = Math.PI
           break
       }
       display.position.set(x, 0, z)
@@ -112,10 +119,11 @@ export class Economy {
       board.position.set(-0.03, 1.5, 0)
       display.add(board)
 
-      // mounted upright against the board, muzzle to the ceiling, like a
-      // rack display — buildViewmodel() bundles in first-person hands, which
-      // read as a pair of disembodied arms once the gun is unhooked from the
-      // player's own viewmodel rig, so strip them and mount just the gun itself
+      // mounted flat against the board, muzzle toward a viewer's right, like
+      // a rack display — buildViewmodel() bundles in first-person hands,
+      // which read as a pair of disembodied arms once the gun is unhooked
+      // from the player's own viewmodel rig, so strip them and mount just
+      // the gun itself
       const gun = buildViewmodel(def.id)
       const leftArm = gun.userData.leftArm as THREE.Object3D | undefined
       const rightArm = gun.userData.rightArm as THREE.Object3D | undefined
@@ -124,10 +132,11 @@ export class Economy {
       gun.position.set(0.08, 1.5, 0)
       // first roll it onto its side facing outward, away from the wall — the
       // opposite sign here was rotating the gun's top (sights/rail) straight
-      // into the board instead of out toward the room — then pitch the
-      // muzzle up 90° so it stands vertical instead of lying flat
+      // into the board instead of out toward the room — then pitch it so the
+      // muzzle points right (rollX is per-facing since "right" depends on
+      // which way the wall faces)
       gun.rotation.z = -Math.PI / 2
-      gun.rotation.x = Math.PI / 2
+      gun.rotation.x = rollX
       gun.scale.setScalar(1.8)
       gun.name = 'display-gun'
       display.add(gun)
