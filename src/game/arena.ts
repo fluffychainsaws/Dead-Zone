@@ -1028,11 +1028,26 @@ export class Arena {
     // where the south fence run picks back up (see corridorClearX above). ----
     const corridorLen = corridorClearX - X1
     this.addFlatMesh(X1 + corridorLen / 2, 0.02, -11, corridorLen, GATE_W, dirtMat, -Math.PI / 2)
+    // flanking "walls" are a fixed metal bar door look — like the yard's own
+    // perimeter fence, not a flat slab — since this stretch is really just
+    // the boundary between the corridor and the open yard grounds either
+    // side of it, not an interior room wall. Purely cosmetic/fixed: still
+    // fully solid for the player (same collider as before), never a
+    // purchasable gate.
     for (const side of [-1, 1]) {
       const wallZ = -11 + side * (GATE_W / 2 + 0.15)
-      const seg = new THREE.BoxGeometry(corridorLen, H, 0.3)
-      seg.translate(X1 + corridorLen / 2, H / 2, wallZ)
-      this.addStatic(seg, this.wallMat)
+      const barCount = Math.max(4, Math.round(corridorLen / 0.35))
+      for (let i = 0; i <= barCount; i++) {
+        const bx = X1 + (corridorLen * i) / barCount
+        const bar = new THREE.CylinderGeometry(0.05, 0.05, H, 6)
+        bar.translate(bx, H / 2, wallZ)
+        this.addStatic(bar, this.barMat)
+      }
+      for (const y of [0.15, H / 2, H - 0.2]) {
+        const rail = new THREE.BoxGeometry(corridorLen, 0.1, 0.1)
+        rail.translate(X1 + corridorLen / 2, y, wallZ)
+        this.addStatic(rail, this.barMat)
+      }
       this.playerColliders.push({
         minX: X1,
         maxX: corridorClearX,
