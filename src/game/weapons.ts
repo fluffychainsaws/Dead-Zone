@@ -1036,7 +1036,7 @@ export function buildViewmodel(defId: string): THREE.Group {
       strut.position.set(0, 0.045, -0.04 + side * 0.08)
       g.add(strut)
     }
-    addRedDot(g, dark, 0, 0.13, -0.04)
+    addRedDot(g, dark, 0, 0.11, -0.04)
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.14), dark)
     lower.position.set(0, -0.02, 0.06)
     g.add(lower)
@@ -1048,8 +1048,8 @@ export function buildViewmodel(defId: string): THREE.Group {
     magazine.position.set(0, -0.16, -0.03)
     magazine.rotation.x = 0.12
     g.add(magazine)
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.36), dark)
-    stock.position.set(0, 0.015, 0.32)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.38), dark)
+    stock.position.set(0, 0.015, 0.31)
     g.add(stock)
     const buttPad = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.03), dark)
     buttPad.position.set(0, 0.015, 0.49)
