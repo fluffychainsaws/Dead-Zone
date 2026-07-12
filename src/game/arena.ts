@@ -124,6 +124,14 @@ export class Arena {
     { id: 3, name: 'ARMORY', minX: -10, maxX: 10, minZ: Z0, maxZ: 0, open: false },
     { id: 4, name: 'THE LAB', minX: LAB_X0, maxX: LAB_X1, minZ: LAB_Z0, maxZ: -22, open: false },
     { id: 5, name: 'PRISON YARD', minX: COURT_X0, maxX: COURT_X1, minZ: COURT_Z0, maxZ: COURT_Z1, open: false },
+    // the short corridor out to the yard sits in the gap between this
+    // building's east wall (X1) and the yard's fence (COURT_X0) — no other
+    // room's box covers that strip, so without one roomOf() returns -1 for
+    // anyone standing in it. The door-routing BFS in nextWaypoint() can't
+    // place them in the room graph then, and zombies just ignore the
+    // corridor and beeline for some other opening instead. z matches the
+    // corridor's actual walls (see buildCourtyard).
+    { id: 6, name: 'YARD CORRIDOR', minX: X1, maxX: COURT_X0, minZ: -12.5, maxZ: -9.5, open: true },
   ]
   doors: Door[] = []
   openings: Opening[] = []
@@ -557,7 +565,7 @@ export class Arena {
       { name: 'ARMORY GATE', cost: 2000, x: -10, z: -11, axis: 'z', rooms: [1, 3] },
       { name: 'ARMORY GATE', cost: 2000, x: 10, z: -11, axis: 'z', rooms: [2, 3] },
       { name: 'THE LAB', cost: 1000, x: STAIR_X, z: Z0, axis: 'x', rooms: [1, 4] },
-      { name: 'PRISON YARD', cost: 100, x: X1, z: -11, axis: 'z', rooms: [2, 5], style: 'double-door' }, // TODO: bump back up once testing is done
+      { name: 'PRISON YARD', cost: 100, x: X1, z: -11, axis: 'z', rooms: [2, 6], style: 'double-door' }, // TODO: bump back up once testing is done
     ]
     defs.forEach((d, id) => {
       const group = new THREE.Group()
@@ -1071,10 +1079,35 @@ export class Arena {
       }
     }
     const digAtX = cx - 6
+    // the corridor door sits at z=-11, which is also COURT_Z1 — the corner
+    // where the west and south fence runs meet. The south run used to start
+    // right at COURT_X0, so it walled off that exact corner even though the
+    // west run's trueGap leaves it open: the two didn't line up, so the
+    // corridor dead-ended against solid fence for players and zombies alike.
+    // Starting the south run past the corridor's width leaves the corner
+    // clear on both sides, matching the west gap.
+    const corridorClearX = COURT_X0 + GATE_W / 2 + 0.2
     buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
     buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, { at: cz, half: 2.0 }) // east — climb spot
-    buildFenceSide(true, COURT_Z1, COURT_X0, COURT_X1, null, { at: digAtX, half: 2.0 }) // south — dig-under spot
+    buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, { at: digAtX, half: 2.0 }) // south — dig-under spot
     buildFenceSide(false, COURT_X0, COURT_Z0, COURT_Z1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
+
+    // the fence's west gap above is a real, always-open walkthrough (unlike
+    // the climb/dig spots below, which are zombie-only tricks) — register it
+    // as a permanently-open door so nextWaypoint()'s room-graph BFS can route
+    // through it into the yard, the same way it routes through any gate
+    this.doors.push({
+      id: this.doors.length,
+      name: 'YARD ENTRANCE',
+      cost: 0,
+      x: COURT_X0,
+      z: -11,
+      rooms: [6, 5],
+      open: true,
+      group: new THREE.Group(),
+      colliders: [],
+      meshes: [],
+    })
 
     // zombies climb the fence here — it visibly stands (and still blocks the
     // player) but the zombie collider is gapped at exactly this spot. The
