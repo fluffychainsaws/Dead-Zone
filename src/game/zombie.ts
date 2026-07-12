@@ -526,16 +526,38 @@ export class Zombie {
         }
       }
       this.group.rotation.y = Math.atan2(mx, mz)
+      // flock separation: summed across every crowding neighbor with no cap,
+      // this could reach or exceed a zombie's own path-following speed once
+      // enough neighbors pile in (e.g. a wave's worth of jittered spawns
+      // landing on top of each other at one opening) — at that point crowd
+      // pressure fully cancels or reverses its forward progress, and a
+      // zombie deep inside a dense cluster can get shoved net-backward every
+      // frame, all the way through a passable gap and pinned against
+      // whatever's on the far side of it (the world boundary wall, in the
+      // courtyard's case) indefinitely. Cap the combined push comfortably
+      // below the slowest zombie's speed floor (plain zombies bottom out at
+      // 1.5) so path-following always keeps a net-positive component toward
+      // the target, no matter how packed the crowd gets.
+      let sepX = 0
+      let sepZ = 0
       for (const o of others) {
         if (o === this || !o.alive) continue
         const ox = pos.x - o.group.position.x
         const oz = pos.z - o.group.position.z
         const od = Math.hypot(ox, oz)
         if (od > 0.01 && od < 0.9) {
-          mx += (ox / od) * 2.2
-          mz += (oz / od) * 2.2
+          sepX += (ox / od) * 2.2
+          sepZ += (oz / od) * 2.2
         }
       }
+      const sepMag = Math.hypot(sepX, sepZ)
+      const sepCap = 1.2
+      if (sepMag > sepCap) {
+        sepX = (sepX / sepMag) * sepCap
+        sepZ = (sepZ / sepMag) * sepCap
+      }
+      mx += sepX
+      mz += sepZ
       pos.x += mx * dt
       this.resolve(nav.colliders, 'x')
       pos.z += mz * dt

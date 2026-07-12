@@ -110,6 +110,15 @@ const COURT_X1 = COURT_X0 + (LAB_X1 - LAB_X0) / 2 // half The Lab's width
 const COURT_Z0 = -35
 const COURT_Z1 = COURT_Z0 + 24 // half The Lab's depth
 const COURT_FENCE_H = 3.2
+// The east/south fence runs have no zombie collider at all (zombies climb
+// or dig through anywhere along them), which means crowd/flock-separation
+// pressure can shove a zombie past the fence line with nothing to stop it
+// until the world boundary wall. Collision resolve() can't let an entity
+// that ends up on the wrong (outer) side of a wall cross back through it —
+// it just gets pushed back out every frame, permanently — so that boundary
+// needs to sit far enough out that ordinary crowd pressure (now capped, see
+// the zombie separation code) can never realistically reach it.
+const COURT_EAST_BUFFER = 18
 const TOWER_H = 6.5 // taller than the fence
 const TOWER_R = 2.2
 
@@ -187,7 +196,7 @@ export class Arena {
     // them, trapping freshly-spawned zombies against it.
     const frameX0 = LAB_X0 - TUNNEL_SPAWN_OFF - 3
     const frameZ0 = LAB_Z0 - TUNNEL_SPAWN_OFF - 3
-    const frameX1 = COURT_X1 + 3 // extended east to clear the new yard
+    const frameX1 = COURT_X1 + COURT_EAST_BUFFER // extended east to clear the new yard, with room to spare
     const bounds: Collider[] = [
       { minX: frameX0, maxX: frameX1, minZ: frameZ0, maxZ: frameZ0 + 2 }, // far north
       { minX: frameX0, maxX: frameX1, minZ: 34, maxZ: 36 }, // far south
@@ -999,10 +1008,14 @@ export class Arena {
 
     // ---- bare dirt apron beyond the fence line, well past where zombies
     // climb/dig/crawl in from — otherwise that ground is untextured void,
-    // which reads as broken rather than "outside". Sized to stop right at
-    // the building's own east wall (X1) on the west side so it doesn't
-    // poke into the building's floor. ----
-    this.addFlatMesh(cx, 0.008, cz, w + 20, d + 16, dirtMat, -Math.PI / 2)
+    // which reads as broken rather than "outside". Asymmetric on purpose:
+    // stops right at the building's own east wall (X1) on the west side so
+    // it doesn't poke into the building's floor, but reaches all the way to
+    // the world boundary on the east side (see COURT_EAST_BUFFER below) —
+    // a plain "w + N" symmetric width can't satisfy both at once. ----
+    const apronX0 = X1
+    const apronX1 = COURT_X1 + COURT_EAST_BUFFER - 2 // inner face of the boundary wall
+    this.addFlatMesh((apronX0 + apronX1) / 2, 0.008, cz, apronX1 - apronX0, d + 16, dirtMat, -Math.PI / 2)
 
     // ---- short corridor connecting the new door back to the yard — dirt
     // underfoot too, it's the same open-air walk out to the yard. Walls
