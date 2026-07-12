@@ -932,15 +932,36 @@ export function buildViewmodel(defId: string): THREE.Group {
     butt.position.set(0, -0.03, 0.28)
     g.add(butt)
   } else if (kind === 'garand') {
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, 0.55), dark)
-    barrel.position.set(0, 0.02, -0.35)
+    // thin exposed muzzle — the only bare metal ahead of the handguard, with
+    // a front sight blade, same as the real rifle's long wood coverage
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.16, 8), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.025, -0.46)
     g.add(barrel)
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.5), wood)
-    stock.position.set(0, -0.02, 0.02)
-    g.add(stock)
-    addRedDot(g, dark, 0, 0.08, -0.15)
-    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.18), wood)
-    butt.position.set(0, -0.05, 0.3)
+    const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.012), dark)
+    frontSight.position.set(0, 0.045, -0.52)
+    g.add(frontSight)
+    // long wood handguard/gas-cylinder cover running almost to the muzzle —
+    // the Garand's most recognizable silhouette trait
+    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.055, 0.42), wood)
+    handguard.position.set(0, 0.02, -0.19)
+    g.add(handguard)
+    // exposed receiver, sitting a bit taller/wider than the wood either side of it
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.065, 0.16), dark)
+    receiver.position.set(0, 0.03, 0.05)
+    g.add(receiver)
+    // op-rod handle — bolts to the right side of the receiver, cycles with
+    // every shot on the real gun; here it's just the telltale silhouette bump
+    const opRod = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.02, 0.1), dark)
+    opRod.position.set(0.035, 0.01, -0.02)
+    g.add(opRod)
+    addRedDot(g, dark, 0, 0.09, -0.06)
+    // stock: pistol-grip wrist tapering back into the buttstock
+    const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.16), wood)
+    wrist.position.set(0, -0.015, 0.15)
+    g.add(wrist)
+    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.13, 0.2), wood)
+    butt.position.set(0, -0.04, 0.31)
     g.add(butt)
   } else if (kind === 'trench') {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.6), dark)
