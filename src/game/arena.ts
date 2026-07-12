@@ -1177,10 +1177,20 @@ export class Arena {
     // instead, matching the corridor's own side walls.
     const gapZ1 = -11 + (GATE_W / 2 + 0.2)
     const corridorNorthZ = -11 + GATE_W / 2 + 0.15 + 0.2
-    buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1) // north — solid
+    // north run's collider extends 1 unit past the actual NE corner (COURT_X1)
+    // to seal flush against the east run — the east run is fully zombie-
+    // passable (see zombiePassable above) so it provides no coverage of its
+    // own right at that corner, leaving a small unguarded gap a crowd-pushed
+    // zombie could slip through and end up stuck outside the whole fence
+    // loop entirely.
+    buildFenceSide(true, COURT_Z0, COURT_X0, COURT_X1 + 1) // north — solid
     buildFenceSide(false, COURT_X1, COURT_Z0, COURT_Z1, null, true) // east — zombies climb anywhere along it
     buildFenceSide(true, COURT_Z1, corridorClearX, COURT_X1, null, true) // south — zombies dig under anywhere along it
     buildFenceSide(false, COURT_X0, COURT_Z0, gapZ1, { at: -11, half: GATE_W / 2 + 0.2 }) // west — corridor door
+    // cross straight through wherever they are along these two runs, instead
+    // of detouring to one of the few fixed spawn points registered below
+    this.registerPassableWall(false, COURT_X1, COURT_Z0, COURT_Z1, 5, -1) // east — inside is -X
+    this.registerPassableWall(true, COURT_Z1, corridorClearX, COURT_X1, 5, -1) // south — inside is -Z
     if (corridorNorthZ > gapZ1) {
       const seg = new THREE.BoxGeometry(0.24, COURT_FENCE_H, corridorNorthZ - gapZ1)
       seg.translate(COURT_X0, COURT_FENCE_H / 2, (gapZ1 + corridorNorthZ) / 2)
@@ -1230,12 +1240,6 @@ export class Arena {
       })
     }
     for (const mx of [digAtX - 8, digAtX, digAtX + 8]) {
-      for (const side of [-1, 1]) {
-        const mound = new THREE.SphereGeometry(0.7, 8, 6)
-        mound.scale(1, 0.4, 1)
-        mound.translate(mx + side * 1.3, 0.1, COURT_Z1 + side * 0.4)
-        this.addStatic(mound, dirtMat)
-      }
       this.openings.push({
         roomId: 5,
         outside: new THREE.Vector3(mx, 0, COURT_Z1 + 2.0),
@@ -1334,9 +1338,13 @@ export class Arena {
     })
 
     // ---- guard towers on the outer edge, taller than the fence ----
+    // pulled back further than the fence's own zombie-crossing offset (2
+    // units) plus the tower's own footprint (TOWER_R=2.2) would reach, so a
+    // zombie crossing right at the SE corner (where the passable east and
+    // south runs meet) doesn't get routed straight into the tower's collider
     const towerSpots: Array<[number, number]> = [
-      [COURT_X0 + 2.5, COURT_Z0 + 2.5],
-      [COURT_X1 - 2.5, COURT_Z1 - 2.5],
+      [COURT_X0 + 6, COURT_Z0 + 6],
+      [COURT_X1 - 6, COURT_Z1 - 6],
     ]
     towerSpots.forEach(([tx, tz], id) => {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(TOWER_R * 0.55, TOWER_R * 0.7, TOWER_H, 8), this.towerMat)
@@ -1730,6 +1738,33 @@ export class Arena {
     })
   }
 
+  /** A long boundary with NO zombie collider anywhere along it (the courtyard's
+   *  climb/dig fence runs) — zombies can cross literally anywhere on it, so
+   *  routing them to one of a handful of fixed registered spawn points instead
+   *  of straight through wherever they already are just makes them walk the
+   *  boundary like a corridor looking for "the" entrance. Register the run's
+   *  extent once and nextWaypoint sends a zombie straight through at its own
+   *  position instead. */
+  private passableWalls: Array<{
+    isX: boolean // true = wall runs along X at a fixed Z; false = along Z at a fixed X
+    fixed: number
+    from: number
+    to: number
+    roomId: number // the room on the inside of this wall
+    insideSign: number // +1 if inside is in the +perpendicular direction, -1 otherwise
+  }> = []
+
+  private registerPassableWall(
+    isX: boolean,
+    fixed: number,
+    from: number,
+    to: number,
+    roomId: number,
+    insideSign: number,
+  ) {
+    this.passableWalls.push({ isX, fixed, from, to, roomId, insideSign })
+  }
+
   /** Spreads a choke-point waypoint sideways so a crowd of zombies converging on
    *  the same gap don't all target the identical coordinate (which otherwise jams
    *  them into a mutually-blocking clump right at the opening). `id` seeds a stable
@@ -1760,6 +1795,26 @@ export class Arena {
     const rb = this.roomOf(target.x, target.z)
     if (ra === rb) return target
     if (ra === -1) {
+      // on a fully zombie-passable boundary (the courtyard's climb/dig fence
+      // runs) — cross straight through at the CURRENT position instead of
+      // detouring to one of a few fixed registered spawn points. Otherwise a
+      // zombie standing right outside the fence, one step from the yard,
+      // would walk the entire boundary like a corridor to reach whichever
+      // fixed point it's routed to, reading as "using the fence as a path."
+      for (const w of this.passableWalls) {
+        if (rb !== w.roomId) continue
+        // a little slack on both checks — a zombie sitting right at a corner
+        // where two of these runs meet is right on the edge of both ranges
+        // and both "outside" tests at once, and getting caught by neither
+        // just falls through to the old fixed-point routing for that corner
+        const along = w.isX ? pos.x : pos.z
+        if (along < w.from - 1 || along > w.to + 1) continue
+        const perp = w.isX ? pos.z : pos.x
+        const isOutsideThisWall = w.insideSign > 0 ? perp < w.fixed + 0.5 : perp > w.fixed - 0.5
+        if (!isOutsideThisWall) continue
+        const crossPerp = w.fixed + w.insideSign * 2
+        return w.isX ? new THREE.Vector3(pos.x, 0, crossPerp) : new THREE.Vector3(crossPerp, 0, pos.z)
+      }
       // outside the building (a spawn tunnel/window): crawl in through the nearest
       // opening — almost always its own — then the room graph routes it onward
       const o = this.nearestOpening(pos, null)
