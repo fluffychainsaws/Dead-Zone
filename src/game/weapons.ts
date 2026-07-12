@@ -112,11 +112,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   liberator: {
     id: 'liberator',
-    name: 'LIBERATOR',
+    name: 'M16',
     damage: 45,
     headshotMult: 2.6,
     rpm: 480,
-    magSize: 20,
+    magSize: 32,
     maxReserve: 160,
     reloadTime: 2.2,
     spread: 0.02,
@@ -1008,18 +1008,50 @@ export function buildViewmodel(defId: string): THREE.Group {
     handle.rotation.x = 0.3
     g.add(handle)
   } else if (kind === 'liberator') {
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.62), dark)
-    barrel.position.set(0, 0.02, -0.4)
+    // M16A2: thin exposed muzzle with a front sight post, long ribbed
+    // handguard, the carry-handle hump over the receiver, straight black
+    // fixed stock — all-black furniture, no wood anywhere on this one
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.14, 8), dark)
+    barrel.rotation.x = Math.PI / 2
+    barrel.position.set(0, 0.03, -0.47)
     g.add(barrel)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.34), dark)
-    g.add(body)
-    addRedDot(g, dark, 0, 0.08, -0.1)
-    const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.08), dark)
-    magazine.position.set(0, -0.14, -0.08)
+    const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.05, 0.02), dark)
+    frontSight.position.set(0, 0.06, -0.51)
+    g.add(frontSight)
+    const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.34, 8), dark)
+    handguard.rotation.x = Math.PI / 2
+    handguard.position.set(0, 0.025, -0.24)
+    g.add(handguard)
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.06, 0.3), dark)
+    upper.position.set(0, 0.035, -0.02)
+    g.add(upper)
+    // carry handle — the arched hump that makes an M16 read as an M16
+    const carryHandle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.2), dark)
+    carryHandle.position.set(0, 0.1, -0.04)
+    g.add(carryHandle)
+    for (const side of [-1, 1]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.03, 0.03), dark)
+      strut.position.set(0, 0.07, -0.04 + side * 0.08)
+      g.add(strut)
+    }
+    addRedDot(g, dark, 0, 0.13, -0.04)
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.14), dark)
+    lower.position.set(0, -0.02, 0.06)
+    g.add(lower)
+    const grip16 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.05), dark)
+    grip16.position.set(0, -0.1, 0.1)
+    grip16.rotation.x = 0.3
+    g.add(grip16)
+    const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.24, 0.075), dark)
+    magazine.position.set(0, -0.16, -0.03)
+    magazine.rotation.x = 0.12
     g.add(magazine)
-    const butt = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.11, 0.2), wood)
-    butt.position.set(0, -0.03, 0.26)
-    g.add(butt)
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.36), dark)
+    stock.position.set(0, 0.015, 0.32)
+    g.add(stock)
+    const buttPad = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.03), dark)
+    buttPad.position.set(0, 0.015, 0.49)
+    g.add(buttPad)
   } else if (kind === 'hellfire') {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.5), dark)
     barrel.rotation.x = Math.PI / 2
@@ -1056,10 +1088,11 @@ export function buildViewmodel(defId: string): THREE.Group {
     const skin = new THREE.MeshLambertMaterial({ color: 0xc79a72 })
     const sleeve = new THREE.MeshLambertMaterial({ color: 0x2e3b26 })
 
-    // handguns (pistol/magnum/liberator/hellfire) load a magazine straight up
-    // into the bottom of the grip; long guns load forward into a magwell in
-    // front of the trigger guard
-    const bottomLoad = kind === 'pistol' || kind === 'magnum' || kind === 'liberator' || kind === 'hellfire'
+    // handguns (pistol/magnum/hellfire) load a magazine straight up into the
+    // bottom of the grip; long guns — including the liberator, a rifle
+    // despite the name — load forward into a magwell in front of the
+    // trigger guard
+    const bottomLoad = kind === 'pistol' || kind === 'magnum' || kind === 'hellfire'
     g.userData.reloadStyle = bottomLoad ? 'bottom' : 'forward'
 
     // left/support hand — cradles the foregrip (or the frame, on handguns) and
