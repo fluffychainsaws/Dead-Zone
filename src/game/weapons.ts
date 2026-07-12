@@ -1025,13 +1025,15 @@ export function buildViewmodel(defId: string): THREE.Group {
     const upper = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.06, 0.3), dark)
     upper.position.set(0, 0.035, -0.02)
     g.add(upper)
-    // carry handle — the arched hump that makes an M16 read as an M16
-    const carryHandle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.2), dark)
-    carryHandle.position.set(0, 0.1, -0.04)
+    // carry handle — the arched hump that makes an M16 read as an M16, kept
+    // low enough that it sits below the red dot's mount instead of poking
+    // up into the sight picture
+    const carryHandle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.2), dark)
+    carryHandle.position.set(0, 0.06, -0.04)
     g.add(carryHandle)
     for (const side of [-1, 1]) {
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.03, 0.03), dark)
-      strut.position.set(0, 0.07, -0.04 + side * 0.08)
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.025, 0.03), dark)
+      strut.position.set(0, 0.045, -0.04 + side * 0.08)
       g.add(strut)
     }
     addRedDot(g, dark, 0, 0.13, -0.04)
