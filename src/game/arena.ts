@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { makeLabelSprite } from './economy'
+import { makeLabelSprite, makeLabelPlane } from './economy'
+import { buildGrenadeMesh } from './grenade'
 import {
   glowSprite,
   dotTexture,
@@ -116,9 +117,9 @@ const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point si
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 export const VOID_POS = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
-// Grenades — right in the Cell Block, the first room anyone sees, clear of
-// the garand's wall rack (x=-29, z=4) and the cell-block cover props.
-export const GRENADE_POS = new THREE.Vector3(-14, 0, 3)
+// Grenades — mounted on the Cell Block's west wall like the gun racks, well
+// clear of the garand's own wall station further down at z=4.
+export const GRENADE_POS = new THREE.Vector3(X0 + T / 2 + 0.14, 0, 10)
 
 // The Prison Yard — an open-air courtyard east of Warden's Wing, same footprint
 // as The Lab. Reached through a double door where the east-wall window used to
@@ -212,7 +213,7 @@ export class Arena {
     this.buildGates()
     this.buildCells()
     this.buildProps()
-    this.buildItemStation(GRENADE_POS.x, GRENADE_POS.z, 'GRENADES', '1000', GLOW_RED)
+    this.buildGrenadeStation()
     this.buildLights()
     this.buildLab()
     this.buildCourtyard()
@@ -1639,6 +1640,62 @@ export class Arena {
       const sweep = Math.sin(elapsed * 0.25 + tower.sweepPhase) * 16
       tower.light.target.position.set(cx + sweep, 0, cz + Math.cos(elapsed * 0.18 + tower.sweepPhase) * 10)
     }
+  }
+
+  /** A little crate of grenades mounted flush on the west wall, styled the
+   *  same way as economy.ts's gun racks — outlined silhouette + a wall-flush
+   *  label plane — rather than the freestanding light-vendor pedestal. */
+  private buildGrenadeStation() {
+    const display = new THREE.Group()
+    display.position.set(GRENADE_POS.x, 0, GRENADE_POS.z)
+    this.scene.add(display)
+
+    // built untransformed so the outline's Box3 measures around the crate's
+    // own local origin, same trick economy.ts uses for its gun outlines
+    const propGroup = new THREE.Group()
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), this.plankMat)
+    propGroup.add(crate)
+    const grenadeSpots: Array<[number, number, number]> = [
+      [0.16, 0.24, -0.16],
+      [0.14, 0.25, 0.04],
+      [0.1, 0.3, -0.03],
+      [0.17, 0.22, 0.19],
+    ]
+    for (const [gx, gy, gz] of grenadeSpots) {
+      const gmesh = buildGrenadeMesh()
+      gmesh.scale.setScalar(1.6)
+      gmesh.position.set(gx, gy, gz)
+      gmesh.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5)
+      propGroup.add(gmesh)
+    }
+    propGroup.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(propGroup)
+    const outlineSize = box.getSize(new THREE.Vector3()).addScalar(0.03)
+    const outline = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(outlineSize.x, outlineSize.y, outlineSize.z)),
+      new THREE.LineBasicMaterial({ color: 0xffffff }),
+    )
+    outline.position.copy(box.getCenter(new THREE.Vector3()))
+    propGroup.add(outline)
+
+    propGroup.position.set(0.15, 1.15, 0)
+    display.add(propGroup)
+    const collider: Collider = {
+      minX: GRENADE_POS.x - 0.3,
+      maxX: GRENADE_POS.x + 0.3,
+      minZ: GRENADE_POS.z - 0.4,
+      maxZ: GRENADE_POS.z + 0.4,
+      height: 1.6,
+    }
+    this.playerColliders.push(collider)
+
+    const label = makeLabelPlane(['GRENADES', '1000'])
+    label.position.set(0.1, 2.0, 0)
+    display.add(label)
+    // danger-red glow so it reads at a glance next to the garand's own rack
+    const glow = glowSprite(GLOW_RED, 1.6, 0.5)
+    glow.position.set(0.2, 1.15, 0)
+    display.add(glow)
   }
 
   private buildItemStation(x: number, z: number, top: string, bottom: string, stops: [string, string, string]) {
