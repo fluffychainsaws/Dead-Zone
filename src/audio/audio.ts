@@ -769,6 +769,21 @@ export class AudioEngine {
     this.tone({ from: 220, to: 70, dur: 0.13, gain: 0.4 })
   }
 
+  /** A grenade leaving the hand — a light whoosh, distinct from the boom to come. */
+  grenadeThrow() {
+    this.tone({ from: 500, to: 250, dur: 0.14, gain: 0.25, type: 'sine' })
+  }
+
+  /** A grenade detonating — sharp crack transient in front of a big, low boom. */
+  explosion() {
+    const ctx = this.sfxReady()
+    if (!ctx) return
+    const t = ctx.currentTime
+    this.noiseHit({ at: t, decay: 0.04, freq: 3800, filterType: 'highpass', gain: 0.6 })
+    this.noiseHit({ at: t, decay: 0.6, freq: 260, gain: 1.0 })
+    this.tone({ at: t, from: 90, to: 24, dur: 0.6, gain: 0.9, type: 'sawtooth' })
+  }
+
   purchase() {
     const ctx = this.sfxReady()
     if (!ctx) return

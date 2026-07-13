@@ -79,6 +79,17 @@ export type PryMsg = {
   zid: number
 }
 
+/** A thrown grenade's launch state — the host replays the exact same physics
+ *  headlessly to compute authoritative splash damage. */
+export type GrenadeMsg = {
+  px: number
+  py: number
+  pz: number
+  vx: number
+  vy: number
+  vz: number
+}
+
 export function makeGameCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
   let code = ''
@@ -103,6 +114,7 @@ export class NetRoom {
   private fx
   private melee
   private pry
+  private grenade
 
   constructor(code: string, roomPrefix = 'game') {
     this.code = code
@@ -120,6 +132,14 @@ export class NetRoom {
     this.fx = this.room.makeAction<ShotFxMsg>('fx')
     this.melee = this.room.makeAction<MeleeMsg>('melee')
     this.pry = this.room.makeAction<PryMsg>('pry')
+    this.grenade = this.room.makeAction<GrenadeMsg>('grenade')
+  }
+
+  sendGrenade(s: GrenadeMsg) {
+    void this.grenade.send(s)
+  }
+  onGrenade(cb: (s: GrenadeMsg, from: string) => void) {
+    this.grenade.onMessage = (s, ctx) => cb(s, ctx.peerId)
   }
 
   sendPry(s: PryMsg) {

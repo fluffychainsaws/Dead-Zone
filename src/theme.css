@@ -934,6 +934,22 @@ body {
   text-shadow: 0 0 8px rgba(224, 32, 32, 0.6);
 }
 
+#grenade-count {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 18px);
+  bottom: calc(env(safe-area-inset-bottom) + 52px);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  color: var(--bone);
+  text-shadow: 0 0 8px rgba(224, 120, 32, 0.45);
+}
+
+#grenade-count.empty {
+  color: rgba(220, 220, 210, 0.4);
+  text-shadow: none;
+}
+
 /* ---------------- revive markers ---------------- */
 
 .revive-marker {
@@ -1214,6 +1230,15 @@ body {
   height: 52px;
   font-size: 1.2rem;
   border-color: rgba(108, 240, 255, 0.5);
+}
+
+#btn-grenade {
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 256px);
+  width: 52px;
+  height: 52px;
+  font-size: 1.2rem;
+  border-color: rgba(224, 32, 32, 0.6);
 }
 
 /* center-screen melee prompt — replaces an always-on button so the screen

@@ -3,6 +3,7 @@ export class Hud {
 
   private root: HTMLElement
   private ammoEl: HTMLElement
+  private grenadeEl: HTMLElement
   private healthFill: HTMLElement
   private waveEl: HTMLElement
   private bannerEl: HTMLElement
@@ -24,6 +25,7 @@ export class Hud {
   private hitTimer: ReturnType<typeof setTimeout> | null = null
   // last-written values — these setters run every frame, the DOM should not
   private lastAmmo = ''
+  private lastGrenades = ''
   private lastWeapon = ''
   private lastHealth = ''
 
@@ -57,6 +59,7 @@ export class Hud {
       <div id="weapon-name"></div>
       <div id="light-status"></div>
       <div id="ammo">--</div>
+      <div id="grenade-count">💣 --</div>
       <div id="game-over">
         <h2>YOU DIED</h2>
         <p id="go-stats"></p>
@@ -65,6 +68,7 @@ export class Hud {
     `
     document.getElementById('app')!.appendChild(this.root)
     this.ammoEl = this.root.querySelector('#ammo')!
+    this.grenadeEl = this.root.querySelector('#grenade-count')!
     this.healthFill = this.root.querySelector('#health-fill')!
     this.waveEl = this.root.querySelector('#wave-num')!
     this.bannerEl = this.root.querySelector('#wave-banner')!
@@ -200,6 +204,14 @@ export class Hud {
     this.lastAmmo = text
     this.ammoEl.textContent = text
     this.ammoEl.classList.toggle('low', !reloading && mag <= 2)
+  }
+
+  setGrenades(count: number, max: number) {
+    const text = `💣 ${count}/${max}`
+    if (text === this.lastGrenades) return
+    this.lastGrenades = text
+    this.grenadeEl.textContent = text
+    this.grenadeEl.classList.toggle('empty', count <= 0)
   }
 
   setHealth(hp: number, maxHp: number, recentlyHit: boolean) {

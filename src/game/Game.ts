@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildArena, type Arena, type Collider, FLASHLIGHT_POS, NVG_POS, VOID_POS } from './arena'
+import { buildArena, type Arena, type Collider, FLASHLIGHT_POS, NVG_POS, VOID_POS, GRENADE_POS } from './arena'
 import { Player } from './player'
 import { Input } from './input'
 import { WeaponSystem, weaponKind } from './weapons'
@@ -8,6 +8,7 @@ import { Horde, WaveSystem, type WavePhase } from './waves'
 import { Economy, POINTS } from './economy'
 import { MysteryBox, BOX_COST } from './mysterybox'
 import { RemotePlayer, RemoteZombieField } from './remote'
+import { Grenade, buildGrenadeMesh } from './grenade'
 import {
   NetRoom,
   selfId,
@@ -41,6 +42,15 @@ const MELEE_DAMAGE = 25
 const MELEE_PUSH = 2.0
 const MELEE_COOLDOWN = 0.7
 const BASE_FOV = 72
+const START_GRENADES = 2
+const MAX_GRENADES = 4
+const GRENADE_PRICE = 1000
+const GRENADE_REFILL = 2
+const GRENADE_SPEED = 15
+const GRENADE_LOB = 4 // extra upward kick so the throw arcs instead of firing flat
+const GRENADE_RADIUS = 6
+const GRENADE_DAMAGE = 260
+const GRENADE_PUSH = 1.6
 
 export class Game {
   private renderer: THREE.WebGLRenderer
@@ -80,6 +90,8 @@ export class Game {
   private mysteryBox!: MysteryBox
   private clawCollider: Collider = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, height: 2.4 }
   private meleeCooldown = 0
+  private grenadeCount = START_GRENADES
+  private grenades: Array<{ g: Grenade; mesh: THREE.Group }> = []
 
   // --- The Lab: light sources & darkness ---
   private ownsFlashlight = false
@@ -303,6 +315,18 @@ export class Game {
       const z = this.horde.zombies.find((x) => x.id === msg.zid)
       z?.registerPry()
     })
+    this.net.onGrenade((msg, from) => {
+      // headless replay of the client's own throw — same physics the thrower
+      // watched fly, just never rendered here, so the landing spot (and
+      // therefore the damage) matches what they saw on their own screen
+      const g = new Grenade(
+        new THREE.Vector3(msg.px, msg.py, msg.pz),
+        new THREE.Vector3(msg.vx, msg.vy, msg.vz),
+      )
+      let exploded = false
+      for (let i = 0; i < 240 && !exploded; i++) exploded = g.update(1 / 60, this.arena.playerColliders)
+      this.resolveGrenadeExplosion(g.pos, from)
+    })
   }
 
   private announceToLobby(code: string) {
@@ -459,6 +483,7 @@ export class Game {
     this.hud.show()
     this.hud.onPause = () => this.openPause()
     this.hud.setPoints(this.economy.points)
+    this.hud.setGrenades(this.grenadeCount, MAX_GRENADES)
     this.lastPlayerPos.copy(this.player.pos)
     this.input.requestLock()
     this.input.showTouchControls()
@@ -716,6 +741,112 @@ export class Game {
         }
       }
     }
+  }
+
+  /** Lobs a grenade in the direction the camera is facing. Every peer always
+   *  renders their own throw locally, same as a melee swing's own visual — a
+   *  client additionally reports it to the host, which is the only one that
+   *  actually owns the zombie array and can apply real damage. */
+  private handleGrenadeThrow() {
+    if (!this.input.consumeGrenadeThrow()) return
+    if (this.player.downed || this.grenadeCount <= 0) return
+    this.grenadeCount--
+    this.hud.setGrenades(this.grenadeCount, MAX_GRENADES)
+    audio.grenadeThrow()
+    const dir = new THREE.Vector3()
+    this.camera.getWorldDirection(dir)
+    const origin = new THREE.Vector3()
+    this.camera.getWorldPosition(origin)
+    const vel = new THREE.Vector3(
+      dir.x * GRENADE_SPEED,
+      dir.y * GRENADE_SPEED + GRENADE_LOB,
+      dir.z * GRENADE_SPEED,
+    )
+    const g = new Grenade(origin, vel)
+    const mesh = buildGrenadeMesh()
+    mesh.position.copy(g.pos)
+    this.scene.add(mesh)
+    this.grenades.push({ g, mesh })
+    if (this.netMode === 'client') {
+      this.net?.sendGrenade({ px: origin.x, py: origin.y, pz: origin.z, vx: vel.x, vy: vel.y, vz: vel.z })
+    }
+  }
+
+  /** Advances every in-flight grenade and detonates any whose fuse has run out.
+   *  Solo/host apply damage the instant their own throw explodes; a client's
+   *  own copy is purely cosmetic — the host already computed its outcome via
+   *  onGrenade the moment the throw was reported. */
+  private updateGrenades(dt: number) {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const entry = this.grenades[i]
+      const exploded = entry.g.update(dt, this.arena.playerColliders)
+      entry.mesh.position.copy(entry.g.pos)
+      entry.mesh.rotation.x += dt * 6
+      entry.mesh.rotation.z += dt * 4
+      if (exploded) {
+        this.scene.remove(entry.mesh)
+        this.grenades.splice(i, 1)
+        this.effects.explosion(entry.g.pos)
+        audio.explosion()
+        if (this.netMode !== 'client') this.resolveGrenadeExplosion(entry.g.pos, null)
+      }
+    }
+  }
+
+  /** Host/solo-authoritative splash damage. `throwerId` is null for the local
+   *  player's own throw (points credited directly); a peer id when this came
+   *  in via onGrenade (points sent back over the wire, same as onMelee/onShot). */
+  private resolveGrenadeExplosion(pos: THREE.Vector3, throwerId: string | null) {
+    const results = this.horde.explosionSweep(
+      pos.x,
+      pos.z,
+      GRENADE_RADIUS,
+      GRENADE_DAMAGE,
+      GRENADE_PUSH,
+      this.zombieNav(),
+    )
+    let amt = 0
+    let anyKill = false
+    for (const r of results) {
+      amt += POINTS.hit
+      if (r.killed) {
+        this.waves.registerKill(r.zombie, false)
+        amt += POINTS.kill
+        anyKill = true
+      }
+    }
+    if (amt === 0) return
+    if (throwerId) {
+      this.net?.sendScore({ amt, kill: anyKill ? 1 : 0, head: 0 }, throwerId)
+    } else {
+      this.earn(amt)
+      this.hud.hitmarker(anyKill ? 'kill' : 'hit')
+    }
+  }
+
+  /** Grenade restock, right by the Cell Block spawn. Returns true if it owned the prompt. */
+  private handleGrenadeBuy(): boolean {
+    const dist = Math.hypot(this.player.pos.x - GRENADE_POS.x, this.player.pos.z - GRENADE_POS.z)
+    if (dist >= 2.8) return false
+    const key = this.input.isTouch ? 'USE' : '[E]'
+    if (this.grenadeCount >= MAX_GRENADES) {
+      this.hud.setPrompt('GRENADES — FULL')
+      return true
+    }
+    this.hud.setPrompt(`${key} GRENADES — ${GRENADE_PRICE}`)
+    if (this.input.consumeInteract()) {
+      if (this.economy.spend(GRENADE_PRICE)) {
+        this.grenadeCount = Math.min(MAX_GRENADES, this.grenadeCount + GRENADE_REFILL)
+        this.hud.setGrenades(this.grenadeCount, MAX_GRENADES)
+        this.hud.setPoints(this.economy.points)
+        this.hud.pointsDelta(-GRENADE_PRICE)
+        audio.purchase()
+      } else {
+        this.hud.banner('NOT ENOUGH POINTS', 1200)
+        audio.deny()
+      }
+    }
+    return true
   }
 
   // ------------------------------ scoring / shopping / groans ------------------------------
@@ -1002,6 +1133,7 @@ export class Game {
   private handleShopping() {
     if (this.handleRevive()) return
     if (this.handleLightBuys()) return
+    if (this.handleGrenadeBuy()) return
     if (this.handleDoors()) return
     if (this.handleWindowRepair()) return
     if (this.handleTowerActivation()) return
@@ -1361,6 +1493,7 @@ export class Game {
           this.hud.setPrompt(null)
         } else {
           this.handleMelee()
+          this.handleGrenadeThrow()
           if (!this.player.downed) this.handleShopping()
           else this.hud.setPrompt(null)
         }
@@ -1437,6 +1570,7 @@ export class Game {
       for (const avatar of this.remotePlayers.values()) avatar.update(dt)
       this.updateGroans(dt)
       this.updateWindowDamage(dt)
+      this.updateGrenades(dt)
       this.netSend()
       this.handleZeroHp()
 

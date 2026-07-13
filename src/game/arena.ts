@@ -116,6 +116,9 @@ const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point si
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 export const VOID_POS = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
+// Grenades — right in the Cell Block, the first room anyone sees, clear of
+// the garand's wall rack (x=-29, z=4) and the cell-block cover props.
+export const GRENADE_POS = new THREE.Vector3(-14, 0, 3)
 
 // The Prison Yard — an open-air courtyard east of Warden's Wing, same footprint
 // as The Lab. Reached through a double door where the east-wall window used to
@@ -209,6 +212,7 @@ export class Arena {
     this.buildGates()
     this.buildCells()
     this.buildProps()
+    this.buildItemStation(GRENADE_POS.x, GRENADE_POS.z, 'GRENADES', '1000', GLOW_RED)
     this.buildLights()
     this.buildLab()
     this.buildCourtyard()

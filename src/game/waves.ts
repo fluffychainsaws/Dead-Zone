@@ -89,6 +89,33 @@ export class Horde {
     return results
   }
 
+  /** Zombies within `radius` of (cx, cz) — damage falls off linearly to 0 at
+   *  the edge, same push-and-kill mechanics as a melee hit. */
+  explosionSweep(
+    cx: number,
+    cz: number,
+    radius: number,
+    maxDamage: number,
+    pushDist: number,
+    nav: ZombieNav,
+  ): Array<{ zombie: Zombie; killed: boolean }> {
+    const results: Array<{ zombie: Zombie; killed: boolean }> = []
+    for (const z of this.zombies) {
+      if (!z.alive) continue
+      const dx = z.group.position.x - cx
+      const dz = z.group.position.z - cz
+      const dist = Math.hypot(dx, dz)
+      if (dist > radius) continue
+      const falloff = 1 - dist / radius
+      const damage = Math.max(1, Math.round(maxDamage * falloff))
+      const dirX = dist > 0.001 ? dx / dist : 1
+      const dirZ = dist > 0.001 ? dz / dist : 0
+      const killed = z.meleeHit(damage, dirX, dirZ, pushDist, nav.colliders)
+      results.push({ zombie: z, killed })
+    }
+    return results
+  }
+
   /** Find the zombie owning a hit object (walks up the parent chain). */
   zombieFor(obj: THREE.Object3D): Zombie | null {
     let cur: THREE.Object3D | null = obj

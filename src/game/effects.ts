@@ -138,6 +138,7 @@ interface PooledTracer {
 // Everything is pre-allocated and recycled — zero allocation during firefights.
 export class Effects {
   muzzleLight: THREE.PointLight
+  private explosionLight: THREE.PointLight
 
   private sparkTex = makeGlowTexture([
     'rgba(255,240,180,1)',
@@ -159,6 +160,8 @@ export class Effects {
   constructor(scene: THREE.Scene) {
     this.muzzleLight = new THREE.PointLight(0xffbb55, 0, 9, 2)
     scene.add(this.muzzleLight)
+    this.explosionLight = new THREE.PointLight(0xffaa44, 0, 15, 2)
+    scene.add(this.explosionLight)
 
     const makePool = (tex: THREE.Texture, blending: THREE.Blending): PooledSprite[] =>
       Array.from({ length: SPARK_POOL }, () => {
@@ -210,6 +213,16 @@ export class Effects {
     s.life = SPARK_LIFE
   }
 
+  /** A grenade blast — a bright flash plus a scattered burst of scaled-up sparks. */
+  explosion(point: THREE.Vector3) {
+    this.explosionLight.position.copy(point)
+    this.explosionLight.intensity = 70
+    for (let i = 0; i < 8; i++) {
+      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.7, Math.random() - 0.5).normalize()
+      this.impact(point.clone().addScaledVector(dir, Math.random() * 1.2), 'spark')
+    }
+  }
+
   tracer(from: THREE.Vector3, to: THREE.Vector3) {
     const t = this.tracers[this.tracerIdx++ % TRACER_POOL]
     t.positions.setXYZ(0, from.x, from.y, from.z)
@@ -222,6 +235,7 @@ export class Effects {
 
   update(dt: number) {
     this.muzzleLight.intensity = Math.max(0, this.muzzleLight.intensity - dt * 300)
+    this.explosionLight.intensity = Math.max(0, this.explosionLight.intensity - dt * 140)
     for (const pool of [this.sparks, this.bloods]) {
       for (const s of pool) {
         if (!s.sprite.visible) continue
