@@ -288,7 +288,15 @@ export class Arena {
     // includes the stairwell corridor so darkness creeps in as you descend
     const inLabProper = z <= -23 && x >= LAB_X0 && x <= LAB_X1
     const inCourtyard = x >= COURT_X0 && x <= COURT_X1 && z >= COURT_Z0 && z <= COURT_Z1
-    const inCourtyardCorridor = x >= X1 && x <= COURT_X0 && z >= -12.7 && z <= -9.3
+    // the corridor's own darkness box used to stop at z=-9.3, but the little
+    // player-only corner-seal stub next to the door (see corridorNorthZ in
+    // buildCourtyard) reaches to z=-9.15 — a sliver past that boundary where
+    // isLab() returned false and lighting snapped back to normal for one
+    // step, right at "that corner by the door". Padded out to z=-8.5 so the
+    // corridor's dark zone comfortably covers the whole real corner instead
+    // of matching it exactly and re-drifting out of sync the next time
+    // either shape changes.
+    const inCourtyardCorridor = x >= X1 && x <= COURT_X0 && z >= -12.7 && z <= -8.5
     return inLabProper || inCourtyard || inCourtyardCorridor
   }
 
