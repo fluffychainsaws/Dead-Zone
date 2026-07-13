@@ -117,9 +117,9 @@ const TUNNEL_SPAWN_OFF = 2.4 // how far outside the wall a tunnel spawn point si
 export const FLASHLIGHT_POS = new THREE.Vector3(-33, 0, -30)
 export const NVG_POS = new THREE.Vector3(-19, 0, -30)
 export const VOID_POS = new THREE.Vector3(DOME_CX, 0, DOME_CZ)
-// Grenades — mounted on the Cell Block's west wall like the gun racks, well
-// clear of the garand's own wall station further down at z=4.
-export const GRENADE_POS = new THREE.Vector3(X0 + T / 2 + 0.14, 0, 10)
+// Grenades — mounted on the z=0 wall that divides the Cell Block from the
+// north wing, just to the right of the Cell Door gate (x=-20) as you face it.
+export const GRENADE_POS = new THREE.Vector3(-14, 0, T / 2 + 0.14)
 
 // The Prison Yard — an open-air courtyard east of Warden's Wing, same footprint
 // as The Lab. Reached through a double door where the east-wall window used to
@@ -1642,12 +1642,17 @@ export class Arena {
     }
   }
 
-  /** A little crate of grenades mounted flush on the west wall, styled the
-   *  same way as economy.ts's gun racks — outlined silhouette + a wall-flush
-   *  label plane — rather than the freestanding light-vendor pedestal. */
+  /** A little crate of grenades mounted flush on the Cell Door's wall, styled
+   *  the same way as economy.ts's gun racks — outlined silhouette + a
+   *  wall-flush label plane — rather than the freestanding light-vendor
+   *  pedestal. This wall runs along X (fixed z=0, room on the +z side), not
+   *  the west wall the gun racks use, so the whole display is turned -90°:
+   *  local +X (the axis every offset below is written against) then maps to
+   *  world +Z, i.e. out into the room instead of along the wall. */
   private buildGrenadeStation() {
     const display = new THREE.Group()
     display.position.set(GRENADE_POS.x, 0, GRENADE_POS.z)
+    display.rotation.y = -Math.PI / 2
     this.scene.add(display)
 
     // built untransformed so the outline's Box3 measures around the crate's
@@ -1680,11 +1685,13 @@ export class Arena {
 
     propGroup.position.set(0.15, 1.15, 0)
     display.add(propGroup)
+    // along-wall spread (X) is the wide axis here; depth off the wall (Z) is
+    // the thin one — swapped from the west-wall gun racks' own collider
     const collider: Collider = {
-      minX: GRENADE_POS.x - 0.3,
-      maxX: GRENADE_POS.x + 0.3,
-      minZ: GRENADE_POS.z - 0.4,
-      maxZ: GRENADE_POS.z + 0.4,
+      minX: GRENADE_POS.x - 0.4,
+      maxX: GRENADE_POS.x + 0.4,
+      minZ: GRENADE_POS.z - 0.3,
+      maxZ: GRENADE_POS.z + 0.3,
       height: 1.6,
     }
     this.playerColliders.push(collider)
