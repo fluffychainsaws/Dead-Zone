@@ -496,6 +496,7 @@ export class Game {
       clawPos: this.mysteryBox.pos,
       spawns: this.arena.activeSpawns().map((s) => s.pos),
       flashlightHits: (p: THREE.Vector3) => this.flashlightHits(p),
+      nearBoardedWindow: (p: THREE.Vector3) => this.arena.nearBoardedWindow(p),
     }
   }
 

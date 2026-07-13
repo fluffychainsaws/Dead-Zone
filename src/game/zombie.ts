@@ -189,6 +189,9 @@ export interface ZombieNav {
   /** True if the player's flashlight is currently on and its beam is actually
    *  landing on this position — drives the dim-vs-bright eye glow swap. */
   flashlightHits(pos: THREE.Vector3): boolean
+  /** True if a still-boarded window is close enough that standing still here
+   *  means chipping away at it, not being stuck. */
+  nearBoardedWindow(pos: THREE.Vector3): boolean
 }
 
 interface Parts {
@@ -648,7 +651,7 @@ export class Zombie {
       this.resolve(nav.colliders, 'z')
 
       const moved = Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z)
-      if (moved < this.speed * dt * 0.2) {
+      if (moved < this.speed * dt * 0.2 && !nav.nearBoardedWindow(pos)) {
         this.stuckT += dt
         if (this.stuckT > 1.0) {
           this.stuckT = 0

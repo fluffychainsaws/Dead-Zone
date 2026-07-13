@@ -655,6 +655,17 @@ export class Arena {
     return best
   }
 
+  /** True if a still-boarded window is close enough to be the thing chipping
+   *  it down (matches the lingering radius updateWindowDamage() itself uses).
+   *  A zombie parked here holding still isn't stuck, it's working. */
+  nearBoardedWindow(pos: THREE.Vector3, maxDist = 1.8): boolean {
+    for (const w of this.windows) {
+      if (w.boards <= 0) continue
+      if (Math.hypot(pos.x - w.pos.x, pos.z - w.pos.z) < maxDist) return true
+    }
+    return false
+  }
+
   private applyWindowBoards(w: WindowBarrier, boards: number) {
     const clamped = Math.max(0, Math.min(w.maxBoards, boards))
     if (clamped === w.boards) return
