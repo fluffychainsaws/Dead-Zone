@@ -1302,9 +1302,12 @@ export class Arena {
     buildBench(cx + 8, cz + 6)
 
     // ---- basketball court: painted asphalt patch, key lines, one hoop ----
+    // all Lambert (no unlit MeshBasic, no Phong specular) so the whole thing
+    // actually goes dark with the rest of the yard instead of glowing
+    // full-bright regardless of ambient light
     const courtMat = new THREE.MeshLambertMaterial({ color: 0x2f3a42 })
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0xe8e8d8 })
-    const hoopMat = new THREE.MeshPhongMaterial({ color: 0x8a8a8a, shininess: 70 })
+    const lineMat = new THREE.MeshLambertMaterial({ color: 0xe8e8d8 })
+    const hoopMat = new THREE.MeshLambertMaterial({ color: 0x8a8a8a })
     const courtCx = cx - 6
     const courtCz = cz - 6
     const courtW = 9
