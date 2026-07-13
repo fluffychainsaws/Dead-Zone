@@ -58,7 +58,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     id: 'garand',
     name: 'M1 GARAND',
     damage: 72,
-    headshotMult: 3,
+    // headshot damage = 72*1.75 = 126 -- zombieHp(wave) = round(60*(1+0.17*(wave-1)))
+    // is 121 at wave 7 (still a 1-shot) and 131 at wave 8 (needs a second
+    // headshot from here on) -- was headshotMult:3 (216 dmg), a 1-shot kill
+    // clear through wave 16, way too strong for a cheap early wall gun.
+    headshotMult: 1.75,
     rpm: 170,
     magSize: 8,
     maxReserve: 96,
