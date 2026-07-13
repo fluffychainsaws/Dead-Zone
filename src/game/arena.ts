@@ -1841,6 +1841,16 @@ export class Arena {
 
   roomOf(x: number, z: number): number {
     for (const r of this.rooms) {
+      // THE LAB's box reaches up to z=-22 so the narrow stairwell corridor
+      // (centred on STAIR_X) counts as being inside it, but taken at face
+      // value that box also swallows the ordinary exterior ground next to
+      // every OTHER north-wall window clear across the map. A zombie
+      // standing right outside e.g. the Showers' window then reads as
+      // "already inside room 4", a room walled off behind its own closed
+      // gate with no route to anywhere else — it has nowhere to path to and
+      // just sits there. Above the lab's real south wall (z>-28), only
+      // count the actual corridor width as room 4.
+      if (r.id === 4 && z > -28 && Math.abs(x - STAIR_X) > 2) continue
       if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.id
     }
     return -1
