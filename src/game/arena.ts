@@ -212,10 +212,15 @@ export class Arena {
     this.zombieColliders.push(...bounds)
   }
 
-  /** The dark basement region — used to swap the local player into pitch-black vision. */
+  /** Any zone that swaps the local player into pitch-black vision (flashlight/NVG
+   *  required) — the basement lab, and now the Prison Yard + its connecting
+   *  corridor, just as dark. */
   isLab(x: number, z: number): boolean {
     // includes the stairwell corridor so darkness creeps in as you descend
-    return z <= -23 && x >= LAB_X0 && x <= LAB_X1
+    const inLabProper = z <= -23 && x >= LAB_X0 && x <= LAB_X1
+    const inCourtyard = x >= COURT_X0 && x <= COURT_X1 && z >= COURT_Z0 && z <= COURT_Z1
+    const inCourtyardCorridor = x >= X1 && x <= COURT_X0 && z >= -12.7 && z <= -9.3
+    return inLabProper || inCourtyard || inCourtyardCorridor
   }
 
   /** Gentle bioluminescent breathing on the flora glow sprites + drifting specimens. */

@@ -491,7 +491,8 @@ export class Game {
     }
   }
 
-  /** Darkness/vision for the local player only — swaps to pitch black inside The Lab. */
+  /** Darkness/vision for the local player only — swaps to pitch black inside The Lab
+   *  (and now the Prison Yard, see Arena.isLab). */
   private updateVision() {
     const nowInLab = this.arena.isLab(this.player.pos.x, this.player.pos.z)
     if (nowInLab !== this.inLab) {
