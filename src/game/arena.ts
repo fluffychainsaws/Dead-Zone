@@ -157,7 +157,12 @@ export class Arena {
     // place them in the room graph then, and zombies just ignore the
     // corridor and beeline for some other opening instead. z matches the
     // corridor's actual walls (see buildCourtyard).
-    { id: 6, name: 'YARD CORRIDOR', minX: X1, maxX: COURT_X0, minZ: -12.5, maxZ: -9.5, open: true },
+    // starts CLOSED like everything else behind a gate — the PRISON YARD
+    // door's own `rooms: [2, 6]` opens it for real once bought. It used to
+    // start open unconditionally, which meant openDoor()'s cascade (see
+    // below) treated the yard as reachable and spawned zombies into it the
+    // moment ANY other door in the game got bought, gate or no gate.
+    { id: 6, name: 'YARD CORRIDOR', minX: X1, maxX: COURT_X0, minZ: -12.5, maxZ: -9.5, open: false },
   ]
   doors: Door[] = []
   openings: Opening[] = []
