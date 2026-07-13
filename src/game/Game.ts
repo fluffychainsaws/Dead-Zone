@@ -86,6 +86,7 @@ export class Game {
   private lightMode: 'off' | 'flashlight' | 'nvg' = 'off'
   private flashlight!: THREE.SpotLight
   private nvgLight!: THREE.AmbientLight
+  private carryLight!: THREE.PointLight
   private baseAmbient = 0
   private baseHemi = 0
   private baseMoon = 0
@@ -115,10 +116,13 @@ export class Game {
     this.arena = buildArena(this.scene)
     this.scene.add(this.camera) // so viewmodel (camera child) renders
     this.player.attachBody(this.scene) // first-person legs, visible looking down
-    // dim carry-light so the viewmodel and nearby ground stay readable
-    const carryLight = new THREE.PointLight(0x99aa88, 3.5, 7, 1.5)
-    carryLight.position.set(0, 0.2, -0.3)
-    this.camera.add(carryLight)
+    // dim carry-light so the viewmodel and nearby ground stay readable — but
+    // this can't stay on inside a pitch-black zone, or it lights up nearby
+    // zombies for free regardless of whether you actually own/toggled a
+    // flashlight. Gated to 0 there in updateVision().
+    this.carryLight = new THREE.PointLight(0x99aa88, 3.5, 7, 1.5)
+    this.carryLight.position.set(0, 0.2, -0.3)
+    this.camera.add(this.carryLight)
 
     // remember normal-light levels so we can plunge The Lab into darkness and restore
     this.baseAmbient = this.arena.ambient.intensity
@@ -508,6 +512,10 @@ export class Game {
         this.arena.hemi.intensity = this.baseHemi
         this.arena.moon.intensity = this.baseMoon
       }
+      // the always-on carry-light otherwise lit up nearby zombies for free in
+      // total darkness, no flashlight required — off entirely in the dark,
+      // same as everything else that isn't your own toggled light source
+      this.carryLight.intensity = nowInLab ? 0 : 3.5
     }
     // light sources only do anything in the dark
     const flashOn = nowInLab && this.lightMode === 'flashlight'
