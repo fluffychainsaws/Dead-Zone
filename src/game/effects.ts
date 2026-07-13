@@ -13,9 +13,9 @@ function makeGlowTexture(stops: [string, string, string]): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c)
 }
 
-/** A tileable strip of layered pine-tree silhouettes — nearer trees darker/taller
- *  in front, distant ones smaller and dimmer behind, transparent above the
- *  treeline so the sky/moon still show through. */
+/** A tileable strip of dense forest — three overlapping jagged canopy ridges
+ *  (solid fill, not individual trees with gaps between them, so nothing
+ *  behind — stars included — shows through), plus a grass strip along the base. */
 export function forestLineTexture(): THREE.CanvasTexture {
   const w = 512
   const h = 256
@@ -24,33 +24,35 @@ export function forestLineTexture(): THREE.CanvasTexture {
   c.height = h
   const ctx = c.getContext('2d')!
 
-  const layers: Array<{ color: string; baseY: number; minH: number; maxH: number; count: number }> = [
-    { color: '#050e08', baseY: h * 0.74, minH: h * 0.26, maxH: h * 0.48, count: 13 },
-    { color: '#081b0e', baseY: h * 0.84, minH: h * 0.38, maxH: h * 0.64, count: 11 },
-    { color: '#0c2814', baseY: h * 0.95, minH: h * 0.52, maxH: h * 0.86, count: 9 },
-  ]
-  for (const layer of layers) {
-    ctx.fillStyle = layer.color
-    const slot = w / layer.count
-    for (let i = 0; i < layer.count; i++) {
-      const cx = (i + 0.5) * slot + (Math.random() - 0.5) * slot * 0.6
-      const treeW = slot * (0.7 + Math.random() * 0.5)
-      const treeH = layer.minH + Math.random() * (layer.maxH - layer.minH)
-      const topY = layer.baseY - treeH
-      const tiers = 3
-      for (let t = 0; t < tiers; t++) {
-        const tierTop = topY + (treeH / tiers) * t
-        const tierBase = topY + (treeH / tiers) * (t + 1) + treeH * 0.08
-        const tierW = treeW * (0.35 + ((t + 1) / tiers) * 0.65)
-        ctx.beginPath()
-        ctx.moveTo(cx, tierTop)
-        ctx.lineTo(cx - tierW / 2, tierBase)
-        ctx.lineTo(cx + tierW / 2, tierBase)
-        ctx.closePath()
-        ctx.fill()
-      }
+  const grassTop = h * 0.87
+  const grassGrad = ctx.createLinearGradient(0, grassTop, 0, h)
+  grassGrad.addColorStop(0, '#1c3a1a')
+  grassGrad.addColorStop(1, '#0d1f0d')
+  ctx.fillStyle = grassGrad
+  ctx.fillRect(0, grassTop, w, h - grassTop)
+
+  // dense, fully-opaque canopy ridges — a continuous jagged silhouette per
+  // layer (random-walk top edge) instead of separate trees with sky gaps
+  // between them, so the whole strip reads as solid forest
+  const drawRidge = (amp: number, jag: number, color: string, points: number) => {
+    const ys: number[] = []
+    let y = grassTop - Math.random() * amp * 0.5
+    for (let i = 0; i <= points; i++) {
+      y += (Math.random() - 0.5) * jag
+      y = Math.max(grassTop - amp, Math.min(grassTop - amp * 0.15, y))
+      ys.push(y)
     }
+    ctx.beginPath()
+    ctx.moveTo(0, grassTop)
+    for (let i = 0; i <= points; i++) ctx.lineTo((i / points) * w, ys[i])
+    ctx.lineTo(w, grassTop)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
   }
+  drawRidge(h * 0.34, h * 0.05, '#04140a', 40)
+  drawRidge(h * 0.46, h * 0.07, '#071e0e', 46)
+  drawRidge(h * 0.6, h * 0.1, '#0b2814', 52)
 
   const tex = new THREE.CanvasTexture(c)
   tex.wrapS = THREE.RepeatWrapping
