@@ -13,6 +13,19 @@ function makeGlowTexture(stops: [string, string, string]): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c)
 }
 
+/** Small soft-edged circle — round PointsMaterial dots instead of square ones. */
+export function dotTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = c.height = 16
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(8, 8, 0, 8, 8, 8)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 16, 16)
+  return new THREE.CanvasTexture(c)
+}
+
 /** Cheap emissive marker — replaces a real PointLight for pure set dressing. */
 export function glowSprite(
   stops: [string, string, string],

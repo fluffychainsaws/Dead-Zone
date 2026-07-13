@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { makeLabelSprite } from './economy'
 import {
   glowSprite,
+  dotTexture,
   GLOW_RED,
   GLOW_GOLD,
   GLOW_CYAN,
@@ -317,54 +318,83 @@ export class Arena {
     this.buildNightSky()
   }
 
-  /** A big inward-facing sphere painted with a full moon and dim stars. It's
-   *  far outside everything else in the scene, so it reads as sky no matter
-   *  where the player is standing — excluded from fog since fog is meant to
-   *  swallow the ground/props, not blank out the backdrop behind them. */
+  /** scene.background already gives us a flat, un-fogged backdrop with zero
+   *  geometry involved, so the moon and stars just need to be built on top of
+   *  it. An earlier version painted them onto a big inward-facing sphere, but
+   *  a sphere's UV mapping pinches hard near the poles — anything painted up
+   *  there smears into a stretched teardrop with stars streaking toward a
+   *  point, like being sucked into a black hole. Billboard sprites and
+   *  screen-space points don't have that problem: each one faces the camera
+   *  dead-on and stays a clean circle no matter where it sits. */
   private buildNightSky() {
-    const c = document.createElement('canvas')
-    c.width = 2048
-    c.height = 1024
-    const ctx = c.getContext('2d')!
+    this.buildStars()
+    this.buildMoon()
+  }
 
-    const grad = ctx.createLinearGradient(0, 0, 0, c.height)
-    grad.addColorStop(0, '#02040a')
-    grad.addColorStop(0.55, '#050b14')
-    grad.addColorStop(1, '#0a1a12')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, c.width, c.height)
-
-    // dim stars — kept out of the lowest band so they don't sit right on the horizon
-    for (let i = 0; i < 700; i++) {
-      const x = Math.random() * c.width
-      const y = Math.random() * c.height * 0.75
-      const r = Math.random() * 1.4 + 0.3
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255,255,255,${(Math.random() * 0.5 + 0.12).toFixed(2)})`
-      ctx.fill()
+  private buildStars() {
+    const COUNT = 700
+    const R = 140
+    const positions = new Float32Array(COUNT * 3)
+    const shades = new Float32Array(COUNT * 3)
+    for (let i = 0; i < COUNT; i++) {
+      const theta = Math.random() * Math.PI * 2
+      // polar angle from the zenith — biased so stars thin out near the
+      // horizon instead of a hard cutoff, and never dip below it
+      const phi = Math.acos(1 - Math.random() * 1.15)
+      const x = R * Math.sin(phi) * Math.cos(theta)
+      const y = R * Math.cos(phi)
+      const z = R * Math.sin(phi) * Math.sin(theta)
+      positions[i * 3] = x
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = z
+      const dim = 0.35 + Math.random() * 0.65
+      shades[i * 3] = dim
+      shades[i * 3 + 1] = dim
+      shades[i * 3 + 2] = dim
     }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(shades, 3))
+    const mat = new THREE.PointsMaterial({
+      size: 1.6,
+      sizeAttenuation: false,
+      map: dotTexture(),
+      transparent: true,
+      opacity: 0.85,
+      vertexColors: true,
+      depthWrite: false,
+      fog: false,
+    })
+    const stars = new THREE.Points(geo, mat)
+    stars.renderOrder = -1
+    this.scene.add(stars)
+  }
 
-    // a large full moon, upper sky
-    const mx = c.width * 0.28
-    const my = c.height * 0.22
-    const mr = 95
-    const glow = ctx.createRadialGradient(mx, my, mr * 0.4, mx, my, mr * 3.2)
-    glow.addColorStop(0, 'rgba(226,232,210,0.35)')
+  /** A billboard sprite, not sphere geometry — always faces the camera dead-on
+   *  so the disc stays perfectly round instead of warping with view angle. */
+  private buildMoon() {
+    const c = document.createElement('canvas')
+    c.width = c.height = 256
+    const ctx = c.getContext('2d')!
+    const cx = 128
+    const cy = 128
+
+    const glow = ctx.createRadialGradient(cx, cy, 30, cx, cy, 128)
+    glow.addColorStop(0, 'rgba(226,232,210,0.4)')
     glow.addColorStop(1, 'rgba(226,232,210,0)')
     ctx.fillStyle = glow
-    ctx.fillRect(mx - mr * 3.2, my - mr * 3.2, mr * 6.4, mr * 6.4)
+    ctx.fillRect(0, 0, 256, 256)
 
     ctx.beginPath()
-    ctx.arc(mx, my, mr, 0, Math.PI * 2)
+    ctx.arc(cx, cy, 62, 0, Math.PI * 2)
     ctx.fillStyle = '#eef0e2'
     ctx.fill()
     ctx.fillStyle = 'rgba(150,155,140,0.35)'
     for (const [cx2, cy2, cr] of [
-      [mx - 30, my - 18, 14],
-      [mx + 20, my + 10, 20],
-      [mx + 5, my - 32, 10],
-      [mx - 12, my + 28, 12],
+      [cx - 20, cy - 12, 9],
+      [cx + 14, cy + 7, 13],
+      [cx + 3, cy - 21, 7],
+      [cx - 8, cy + 19, 8],
     ]) {
       ctx.beginPath()
       ctx.arc(cx2, cy2, cr, 0, Math.PI * 2)
@@ -372,12 +402,13 @@ export class Arena {
     }
 
     const tex = new THREE.CanvasTexture(c)
-    const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(150, 32, 20),
-      new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false }),
+    const moon = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }),
     )
-    sky.renderOrder = -1
-    this.scene.add(sky)
+    moon.scale.set(48, 48, 1)
+    moon.position.copy(new THREE.Vector3(-10, 20, -6).normalize().multiplyScalar(140))
+    moon.renderOrder = -1
+    this.scene.add(moon)
   }
 
   /** Wall run along one axis, split by gaps; each gap becomes an opening/tunnel/clean gate gap. */
