@@ -65,6 +65,8 @@ export interface WindowBarrier {
   maxBoards: number
   plankMeshes: THREE.Mesh[]
   zombieCollider: Collider
+  /** Hits still needed to knock down the frontmost intact plank. */
+  plankHits: number
 }
 
 /** A guard tower overlooking the Prison Yard — always standing, but its
@@ -86,6 +88,8 @@ const H = 5 // wall height
 const T = 1 // wall thickness
 const GATE_W = 3
 const WIN_W = 2.6
+const WINDOW_PLANK_YS = [0.3, 0.72, 1.14, 1.56, 1.98] // bottom-up; last is the outermost/first to break
+const PLANK_HIT_HP = 2 // hits needed to knock down a single plank
 // failing prison floodlights — three across the cell block, one per wing;
 // shared between the actual PointLights and their visible ceiling fixtures
 const CEIL_LIGHT_SPOTS: Array<[number, number]> = [
@@ -492,7 +496,7 @@ export class Arena {
       // individual, non-merged planks — need to be independently knocked down
       // and hammered back up, unlike the rest of the static geometry
       const plankMeshes: THREE.Mesh[] = []
-      for (const y of [0.35, 0.75]) {
+      for (const y of WINDOW_PLANK_YS) {
         const geo = new THREE.BoxGeometry(isX ? WIN_W : T * 0.5, 0.18, isX ? T * 0.5 : WIN_W)
         const mesh = new THREE.Mesh(geo, this.plankMat)
         mesh.position.set(cx, y, cz)
@@ -516,6 +520,7 @@ export class Arena {
         maxBoards: plankMeshes.length,
         plankMeshes,
         zombieCollider,
+        plankHits: PLANK_HIT_HP,
       })
     } else {
       // breach: a low sill players can vault, zombies crawl straight through —
@@ -585,16 +590,25 @@ export class Arena {
     }
   }
 
-  /** Hammers one board back up — call from the repair interaction. */
+  /** Hammers one board back up — call from the repair interaction. Comes back
+   *  at full health, same as a freshly-built window. */
   repairWindowBoard(id: number) {
     const w = this.windows[id]
-    if (w) this.applyWindowBoards(w, w.boards + 1)
+    if (!w) return
+    this.applyWindowBoards(w, w.boards + 1)
+    w.plankHits = PLANK_HIT_HP
   }
 
-  /** Knocks one board loose — call from the zombie-damage tick. */
+  /** Chips one hit off the frontmost plank — call from the zombie-damage tick.
+   *  Takes PLANK_HIT_HP hits to actually knock a plank loose. */
   damageWindowBoard(id: number) {
     const w = this.windows[id]
-    if (w) this.applyWindowBoards(w, w.boards - 1)
+    if (!w || w.boards <= 0) return
+    w.plankHits--
+    if (w.plankHits <= 0) {
+      this.applyWindowBoards(w, w.boards - 1)
+      w.plankHits = PLANK_HIT_HP
+    }
   }
 
   /** Client-side: snap straight to the host's authoritative board count. */
