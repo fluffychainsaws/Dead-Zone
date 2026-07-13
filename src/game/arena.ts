@@ -663,7 +663,7 @@ export class Arena {
     // north (z=Z0): a stairwell gate down to The Lab, plus windows into showers, armory (x2), warden
     this.wallWithOpenings('x', Z0, X0, X1, [
       { at: STAIR_X, roomId: 1, kind: 'gate' },
-      { at: -20, roomId: 1, kind: 'window' },
+      { at: -22, roomId: 1, kind: 'window' },
       { at: -5, roomId: 3, kind: 'window' },
       { at: 5, roomId: 3, kind: 'window' },
       { at: 20, roomId: 2, kind: 'window' },
