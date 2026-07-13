@@ -45,7 +45,6 @@ const BASE_FOV = 72
 const START_GRENADES = 2
 const MAX_GRENADES = 4
 const GRENADE_PRICE = 1000
-const GRENADE_REFILL = 2
 const GRENADE_SPEED = 15
 const GRENADE_LOB = 4 // extra upward kick so the throw arcs instead of firing flat
 const GRENADE_RADIUS = 6
@@ -836,7 +835,7 @@ export class Game {
     this.hud.setPrompt(`${key} GRENADES — ${GRENADE_PRICE}`)
     if (this.input.consumeInteract()) {
       if (this.economy.spend(GRENADE_PRICE)) {
-        this.grenadeCount = Math.min(MAX_GRENADES, this.grenadeCount + GRENADE_REFILL)
+        this.grenadeCount = MAX_GRENADES
         this.hud.setGrenades(this.grenadeCount, MAX_GRENADES)
         this.hud.setPoints(this.economy.points)
         this.hud.pointsDelta(-GRENADE_PRICE)
