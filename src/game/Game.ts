@@ -89,6 +89,7 @@ export class Game {
   private nvgLight!: THREE.AmbientLight
   private carryLight!: THREE.PointLight
   private wasNvgOn = false
+  private scratchDir = new THREE.Vector3()
   private baseAmbient = 0
   private baseHemi = 0
   private baseMoon = 0
@@ -494,7 +495,23 @@ export class Game {
       inOpeningZone: (p: THREE.Vector3) => this.arena.inOpeningZone(p),
       clawPos: this.mysteryBox.pos,
       spawns: this.arena.activeSpawns().map((s) => s.pos),
+      flashlightHits: (p: THREE.Vector3) => this.flashlightHits(p),
     }
+  }
+
+  /** Is the flashlight on and its beam actually landing on this point? Matches
+   *  the SpotLight's own distance (26) and angle (0.62 rad) so the zombie eye
+   *  glow only brightens where the beam itself would actually be visible. */
+  private flashlightHits(pos: THREE.Vector3): boolean {
+    if (this.flashlight.intensity <= 0) return false
+    const camPos = this.camera.position
+    const dx = pos.x - camPos.x
+    const dz = pos.z - camPos.z
+    const dist = Math.hypot(dx, dz)
+    if (dist < 0.05 || dist > 26) return false
+    const dir = this.camera.getWorldDirection(this.scratchDir)
+    const dot = (dx / dist) * dir.x + (dz / dist) * dir.z
+    return dot >= Math.cos(0.62)
   }
 
   /** Darkness/vision for the local player only — swaps to pitch black inside The Lab

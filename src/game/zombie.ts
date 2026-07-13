@@ -1,25 +1,52 @@
 import * as THREE from 'three'
 import type { Collider } from './arena'
 
-// glowing eyes: unlit (ignores scene lighting entirely, same as before) AND
-// fog-immune, so they stay visible piercing straight through the pitch-black
-// fog instead of fading to nothing at any real encounter distance — a real
-// light source (flashlight) was never what made them visible, the fog was
-// just swallowing them. Shared across every zombie (not rebuilt per-instance)
-// so NVG can boost every eye at once from one place; excluded from
-// disposeZombieMesh below since it's still in use by every OTHER zombie.
+// glowing eyes: unlit (ignores scene lighting entirely) AND fog-immune, so
+// they never fade to nothing at distance in the pitch-black fog. Two states
+// per color — DIM is what you see unaided (a faint, barely-there ember, not
+// the old full-strength glow), BRIGHT is what a flashlight beam actually
+// landing on the zombie shows instead, swapped in per-zombie per-frame by
+// nav.flashlightHits(). Shared across every zombie of a given kind (not
+// rebuilt per-instance) so NVG can boost every eye at once from one place;
+// excluded from disposeZombieMesh below since other live zombies still
+// reference the same material objects.
 const EYE_BASE_NORMAL = new THREE.Color(0xc8e04a)
 const EYE_BASE_AGGRO = new THREE.Color(0xff2a1a)
-const EYE_MAT_NORMAL = new THREE.MeshBasicMaterial({ color: EYE_BASE_NORMAL.clone(), fog: false })
-const EYE_MAT_AGGRO = new THREE.MeshBasicMaterial({ color: EYE_BASE_AGGRO.clone(), fog: false })
+const EYE_DIM_MULT = 0.25 // 3/4 weaker unaided
+const EYE_BRIGHT_MULT = 2.4 // blown-out hot glow once the flashlight actually hits it
+const EYE_MAT_NORMAL_DIM = new THREE.MeshBasicMaterial({
+  color: EYE_BASE_NORMAL.clone().multiplyScalar(EYE_DIM_MULT),
+  fog: false,
+})
+const EYE_MAT_AGGRO_DIM = new THREE.MeshBasicMaterial({
+  color: EYE_BASE_AGGRO.clone().multiplyScalar(EYE_DIM_MULT),
+  fog: false,
+})
+const EYE_MAT_NORMAL_BRIGHT = new THREE.MeshBasicMaterial({
+  color: EYE_BASE_NORMAL.clone().multiplyScalar(EYE_BRIGHT_MULT),
+  fog: false,
+})
+const EYE_MAT_AGGRO_BRIGHT = new THREE.MeshBasicMaterial({
+  color: EYE_BASE_AGGRO.clone().multiplyScalar(EYE_BRIGHT_MULT),
+  fog: false,
+})
 
-/** Call whenever night-vision goggles turn on/off — every zombie's eyes read
- *  a little brighter through NVG, like any other bioluminescent glow would. */
+/** Call whenever night-vision goggles turn on/off — every zombie's DIM eye
+ *  glow reads a little brighter through NVG, like any other bioluminescent
+ *  glow would. Doesn't touch the BRIGHT (flashlight-hit) material — NVG and
+ *  the flashlight are mutually exclusive light modes, so they never overlap. */
 export function setZombieEyeNvgBoost(active: boolean) {
-  const mult = active ? 1.6 : 1.0
-  EYE_MAT_NORMAL.color.copy(EYE_BASE_NORMAL).multiplyScalar(mult)
-  EYE_MAT_AGGRO.color.copy(EYE_BASE_AGGRO).multiplyScalar(mult)
+  const mult = EYE_DIM_MULT * (active ? 1.6 : 1.0)
+  EYE_MAT_NORMAL_DIM.color.copy(EYE_BASE_NORMAL).multiplyScalar(mult)
+  EYE_MAT_AGGRO_DIM.color.copy(EYE_BASE_AGGRO).multiplyScalar(mult)
 }
+
+const SHARED_EYE_MATS = new Set<THREE.Material>([
+  EYE_MAT_NORMAL_DIM,
+  EYE_MAT_AGGRO_DIM,
+  EYE_MAT_NORMAL_BRIGHT,
+  EYE_MAT_AGGRO_BRIGHT,
+])
 
 /** Frees geometry/materials for a zombie mesh being replaced or thrown away. */
 function disposeZombieMesh(g: THREE.Group) {
@@ -28,7 +55,7 @@ function disposeZombieMesh(g: THREE.Group) {
       o.geometry.dispose()
       const mats = Array.isArray(o.material) ? o.material : [o.material]
       for (const m of mats) {
-        if (m === EYE_MAT_NORMAL || m === EYE_MAT_AGGRO) continue // shared, still in use elsewhere
+        if (SHARED_EYE_MATS.has(m)) continue // shared, still in use elsewhere
         m.dispose()
       }
     }
@@ -159,6 +186,9 @@ export interface ZombieNav {
   /** Every currently-active spawn point — a zombie that hasn't moved in a
    *  while gets teleported to a random one of these instead. */
   spawns: THREE.Vector3[]
+  /** True if the player's flashlight is currently on and its beam is actually
+   *  landing on this position — drives the dim-vs-bright eye glow swap. */
+  flashlightHits(pos: THREE.Vector3): boolean
 }
 
 interface Parts {
@@ -168,6 +198,9 @@ interface Parts {
   legL: THREE.Mesh
   legR: THREE.Mesh
   torso: THREE.Mesh
+  eyeL: THREE.Mesh
+  eyeR: THREE.Mesh
+  isAggroEyes: boolean
 }
 
 let nextId = 1
@@ -390,6 +423,21 @@ export class Zombie {
       return null
     }
     if (this.thrownPhase !== 'none') return this.updateThrown(dt, targets)
+
+    // dim ember by default, blown-out bright the instant a flashlight beam
+    // actually lands on this zombie — cheap enough to check every frame
+    const lit = nav.flashlightHits(this.group.position)
+    const wantMat = this.parts.isAggroEyes
+      ? lit
+        ? EYE_MAT_AGGRO_BRIGHT
+        : EYE_MAT_AGGRO_DIM
+      : lit
+        ? EYE_MAT_NORMAL_BRIGHT
+        : EYE_MAT_NORMAL_DIM
+    if (this.parts.eyeL.material !== wantMat) {
+      this.parts.eyeL.material = wantMat
+      this.parts.eyeR.material = wantMat
+    }
 
     this.animT += dt * (this.runner || this.isZuggernaut ? 2.4 : 1.0)
     if (this.isZuggernaut) {
@@ -993,7 +1041,8 @@ function buildZombieMesh(
   head.position.y = 1.34
   head.name = 'head'
   // glowing eyes + slack mouth on the front face (+z = facing direction) — juggernauts/zuggernauts always burn red
-  const eyeMat = runner || juggernaut || zuggernaut ? EYE_MAT_AGGRO : EYE_MAT_NORMAL
+  const isAggroEyes = runner || juggernaut || zuggernaut
+  const eyeMat = isAggroEyes ? EYE_MAT_AGGRO_DIM : EYE_MAT_NORMAL_DIM
   const eyeGeo = new THREE.BoxGeometry(0.055 * b, 0.045 * b, 0.02)
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
   eyeL.position.set(-0.062 * b, 0.045 * b, 0.132 * b)
@@ -1017,5 +1066,5 @@ function buildZombieMesh(
 
   group.add(legL, legR, torso, head, armL, armR)
   if (zuggernaut) group.userData.pulseMats = [skin, cloth]
-  return { group, parts: { head, armL, armR, legL, legR, torso } }
+  return { group, parts: { head, armL, armR, legL, legR, torso, eyeL, eyeR, isAggroEyes } }
 }
