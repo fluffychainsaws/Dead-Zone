@@ -1101,7 +1101,7 @@ export function buildViewmodel(defId: string): THREE.Group {
     // shorter and higher than before — it used to hang low enough to poke
     // out past the rest of the gun's silhouette
     const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.18, 0.075), dark)
-    magazine.position.set(0, -0.13, -0.03)
+    magazine.position.set(0, -0.13, 0.03)
     magazine.rotation.x = 0.12
     g.add(magazine)
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.38), dark)
