@@ -31,10 +31,9 @@ export function forestLineTexture(): THREE.CanvasTexture {
   ctx.fillStyle = grassGrad
   ctx.fillRect(0, grassTop, w, h - grassTop)
 
-  // dense, fully-opaque black canopy ridges with a dark-grey outline along
-  // the jagged top edge — a continuous silhouette per layer (random-walk
-  // top edge) instead of separate trees with sky gaps between them, so the
-  // whole strip reads as solid forest
+  // dense, fully-opaque black canopy ridges — a continuous silhouette per
+  // layer (random-walk top edge) instead of separate trees with sky gaps
+  // between them, so the whole strip reads as solid forest
   const drawRidge = (amp: number, jag: number, points: number) => {
     const ys: number[] = []
     let y = grassTop - Math.random() * amp * 0.5
@@ -50,14 +49,6 @@ export function forestLineTexture(): THREE.CanvasTexture {
     ctx.closePath()
     ctx.fillStyle = '#000000'
     ctx.fill()
-
-    ctx.beginPath()
-    ctx.moveTo(0, ys[0])
-    for (let i = 1; i <= points; i++) ctx.lineTo((i / points) * w, ys[i])
-    ctx.strokeStyle = '#4a4a4a'
-    ctx.lineWidth = 1.5
-    ctx.lineJoin = 'round'
-    ctx.stroke()
   }
   drawRidge(h * 0.34, h * 0.05, 40)
   drawRidge(h * 0.46, h * 0.07, 46)

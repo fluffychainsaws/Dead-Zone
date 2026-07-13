@@ -238,22 +238,34 @@ export class Arena {
    *  geometry for a fraction of the draw calls. */
   private buildForestLine(x0: number, x1: number, z0: number, z1: number) {
     const TREE_H = 16
-    const UNIT_W = 22 // world units per texture repeat
+    const SEG_W = 24 // world units per segment — each gets its own freshly
+    // generated texture instead of repeating one tile, so the line doesn't
+    // read as an obviously-stamped pattern along a long run
     const OFF = 2 // pushed past the boundary so it's never inside the invisible wall
-    const baseTex = forestLineTexture()
 
     const addStrip = (cx: number, cz: number, length: number, rotY: number) => {
-      const tex = baseTex.clone()
-      tex.needsUpdate = true
-      tex.wrapS = THREE.RepeatWrapping
-      tex.repeat.set(Math.max(1, Math.round(length / UNIT_W)), 1)
-      const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(length, TREE_H),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
-      )
-      mesh.position.set(cx, TREE_H / 2, cz)
-      mesh.rotation.y = rotY
-      this.scene.add(mesh)
+      const segs = Math.max(1, Math.round(length / SEG_W))
+      const segLen = length / segs
+      // local +X maps to world +X at rotY=0, or world -Z at rotY=PI/2 (the
+      // only two rotations this ever gets called with)
+      const dx = rotY === 0 ? segLen : 0
+      const dz = rotY === 0 ? 0 : -segLen
+      const startX = cx - (dx * (segs - 1)) / 2
+      const startZ = cz - (dz * (segs - 1)) / 2
+      for (let i = 0; i < segs; i++) {
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(segLen + 0.5, TREE_H), // slight overlap hides seams
+          new THREE.MeshBasicMaterial({
+            map: forestLineTexture(),
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        )
+        mesh.position.set(startX + dx * i, TREE_H / 2, startZ + dz * i)
+        mesh.rotation.y = rotY
+        this.scene.add(mesh)
+      }
     }
 
     const midX = (x0 + x1) / 2
