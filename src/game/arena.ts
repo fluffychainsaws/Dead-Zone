@@ -176,6 +176,7 @@ export class Arena {
   private barbWireMat = new THREE.MeshPhongMaterial({ color: 0x1c1a16, shininess: 85 })
   private towerMat = new THREE.MeshLambertMaterial({ color: 0x2b2f28 })
   private doorMat = new THREE.MeshPhongMaterial({ color: 0x342820, shininess: 25 })
+  private roofMat = new THREE.MeshLambertMaterial({ color: 0x20241d })
   // static geometry buckets, merged into one mesh per material after build
   private statics = new Map<THREE.Material, THREE.BufferGeometry[]>()
 
@@ -294,6 +295,75 @@ export class Arena {
     this.colliderMeshes.push(ground)
     this.scene.fog = new THREE.FogExp2(0x0a100a, 0.026)
     this.scene.background = new THREE.Color(0x0a100a)
+
+    // caps the main building — the Prison Yard and its corridor stay open-air
+    // so the night sky is actually visible from somewhere
+    this.addFlatMesh(0, H + 0.02, 0, X1 - X0, Z1 - Z0, this.roofMat, Math.PI / 2)
+
+    this.buildNightSky()
+  }
+
+  /** A big inward-facing sphere painted with a full moon and dim stars. It's
+   *  far outside everything else in the scene, so it reads as sky no matter
+   *  where the player is standing — excluded from fog since fog is meant to
+   *  swallow the ground/props, not blank out the backdrop behind them. */
+  private buildNightSky() {
+    const c = document.createElement('canvas')
+    c.width = 2048
+    c.height = 1024
+    const ctx = c.getContext('2d')!
+
+    const grad = ctx.createLinearGradient(0, 0, 0, c.height)
+    grad.addColorStop(0, '#02040a')
+    grad.addColorStop(0.55, '#050b14')
+    grad.addColorStop(1, '#0a1a12')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, c.width, c.height)
+
+    // dim stars — kept out of the lowest band so they don't sit right on the horizon
+    for (let i = 0; i < 700; i++) {
+      const x = Math.random() * c.width
+      const y = Math.random() * c.height * 0.75
+      const r = Math.random() * 1.4 + 0.3
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(255,255,255,${(Math.random() * 0.5 + 0.12).toFixed(2)})`
+      ctx.fill()
+    }
+
+    // a large full moon, upper sky
+    const mx = c.width * 0.28
+    const my = c.height * 0.22
+    const mr = 95
+    const glow = ctx.createRadialGradient(mx, my, mr * 0.4, mx, my, mr * 3.2)
+    glow.addColorStop(0, 'rgba(226,232,210,0.35)')
+    glow.addColorStop(1, 'rgba(226,232,210,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(mx - mr * 3.2, my - mr * 3.2, mr * 6.4, mr * 6.4)
+
+    ctx.beginPath()
+    ctx.arc(mx, my, mr, 0, Math.PI * 2)
+    ctx.fillStyle = '#eef0e2'
+    ctx.fill()
+    ctx.fillStyle = 'rgba(150,155,140,0.35)'
+    for (const [cx2, cy2, cr] of [
+      [mx - 30, my - 18, 14],
+      [mx + 20, my + 10, 20],
+      [mx + 5, my - 32, 10],
+      [mx - 12, my + 28, 12],
+    ]) {
+      ctx.beginPath()
+      ctx.arc(cx2, cy2, cr, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    const tex = new THREE.CanvasTexture(c)
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(150, 32, 20),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false }),
+    )
+    sky.renderOrder = -1
+    this.scene.add(sky)
   }
 
   /** Wall run along one axis, split by gaps; each gap becomes an opening/tunnel/clean gate gap. */
