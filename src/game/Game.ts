@@ -25,6 +25,7 @@ import {
   ZUGGERNAUT_THROW_MAX_DIST,
   ZUGGERNAUT_HEAD_HEIGHT,
   ZUGGERNAUT_HOLD_FORWARD_OFFSET,
+  setZombieEyeNvgBoost,
 } from './zombie'
 import { audio } from '../audio/audio'
 import { Hud } from '../ui/hud'
@@ -87,6 +88,7 @@ export class Game {
   private flashlight!: THREE.SpotLight
   private nvgLight!: THREE.AmbientLight
   private carryLight!: THREE.PointLight
+  private wasNvgOn = false
   private baseAmbient = 0
   private baseHemi = 0
   private baseMoon = 0
@@ -522,6 +524,10 @@ export class Game {
     const nvgOn = nowInLab && this.lightMode === 'nvg'
     this.flashlight.intensity = flashOn ? 6 : 0
     this.nvgLight.intensity = nvgOn ? 2.2 : 0
+    if (nvgOn !== this.wasNvgOn) {
+      this.wasNvgOn = nvgOn
+      setZombieEyeNvgBoost(nvgOn)
+    }
     this.hud.setLightStatus(nowInLab, this.lightMode, this.ownsFlashlight, this.ownsNVG)
   }
 

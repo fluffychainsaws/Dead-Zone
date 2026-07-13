@@ -1,13 +1,36 @@
 import * as THREE from 'three'
 import type { Collider } from './arena'
 
+// glowing eyes: unlit (ignores scene lighting entirely, same as before) AND
+// fog-immune, so they stay visible piercing straight through the pitch-black
+// fog instead of fading to nothing at any real encounter distance — a real
+// light source (flashlight) was never what made them visible, the fog was
+// just swallowing them. Shared across every zombie (not rebuilt per-instance)
+// so NVG can boost every eye at once from one place; excluded from
+// disposeZombieMesh below since it's still in use by every OTHER zombie.
+const EYE_BASE_NORMAL = new THREE.Color(0xc8e04a)
+const EYE_BASE_AGGRO = new THREE.Color(0xff2a1a)
+const EYE_MAT_NORMAL = new THREE.MeshBasicMaterial({ color: EYE_BASE_NORMAL.clone(), fog: false })
+const EYE_MAT_AGGRO = new THREE.MeshBasicMaterial({ color: EYE_BASE_AGGRO.clone(), fog: false })
+
+/** Call whenever night-vision goggles turn on/off — every zombie's eyes read
+ *  a little brighter through NVG, like any other bioluminescent glow would. */
+export function setZombieEyeNvgBoost(active: boolean) {
+  const mult = active ? 1.6 : 1.0
+  EYE_MAT_NORMAL.color.copy(EYE_BASE_NORMAL).multiplyScalar(mult)
+  EYE_MAT_AGGRO.color.copy(EYE_BASE_AGGRO).multiplyScalar(mult)
+}
+
 /** Frees geometry/materials for a zombie mesh being replaced or thrown away. */
 function disposeZombieMesh(g: THREE.Group) {
   g.traverse((o) => {
     if (o instanceof THREE.Mesh) {
       o.geometry.dispose()
-      if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose())
-      else o.material.dispose()
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      for (const m of mats) {
+        if (m === EYE_MAT_NORMAL || m === EYE_MAT_AGGRO) continue // shared, still in use elsewhere
+        m.dispose()
+      }
     }
   })
 }
@@ -970,7 +993,7 @@ function buildZombieMesh(
   head.position.y = 1.34
   head.name = 'head'
   // glowing eyes + slack mouth on the front face (+z = facing direction) — juggernauts/zuggernauts always burn red
-  const eyeMat = new THREE.MeshBasicMaterial({ color: runner || juggernaut || zuggernaut ? 0xff2a1a : 0xc8e04a })
+  const eyeMat = runner || juggernaut || zuggernaut ? EYE_MAT_AGGRO : EYE_MAT_NORMAL
   const eyeGeo = new THREE.BoxGeometry(0.055 * b, 0.045 * b, 0.02)
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
   eyeL.position.set(-0.062 * b, 0.045 * b, 0.132 * b)
