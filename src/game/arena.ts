@@ -86,6 +86,16 @@ const H = 5 // wall height
 const T = 1 // wall thickness
 const GATE_W = 3
 const WIN_W = 2.6
+// failing prison floodlights — three across the cell block, one per wing;
+// shared between the actual PointLights and their visible ceiling fixtures
+const CEIL_LIGHT_SPOTS: Array<[number, number]> = [
+  [-20, 11],
+  [0, 11],
+  [20, 11],
+  [-20, -11],
+  [20, -11],
+  [0, -11],
+]
 
 // The Lab — a bioluminescent basement north of the Showers, reached down a stairwell.
 const LAB_X0 = -40
@@ -788,6 +798,7 @@ export class Arena {
     s.userData.baseOpacity = opacity
     this.floraPulse.push(s)
     this.scene.add(s)
+    return s
   }
 
   /** An oriented tapered cylinder running between two points — trunk/branch/root limbs. */
@@ -1672,18 +1683,33 @@ export class Arena {
     this.moon = new THREE.DirectionalLight(0x51624a, 0.9)
     this.moon.position.set(-10, 20, -6)
     this.scene.add(this.moon)
-    // failing prison floodlights — three across the cell block, one per wing
-    for (const [x, z] of [
-      [-20, 11],
-      [0, 11],
-      [20, 11],
-      [-20, -11],
-      [20, -11],
-      [0, -11],
-    ]) {
+    for (const [x, z] of CEIL_LIGHT_SPOTS) {
       const lamp = new THREE.PointLight(0x66ff44, 16, 26, 1.7)
       lamp.position.set(x, 4.6, z)
       this.scene.add(lamp)
+    }
+    this.buildCeilingFixtures()
+  }
+
+  /** Visible housings for the floodlights above — flush-mounted under the roof
+   *  so looking up shows an actual fixture, not just the roof slab lit from
+   *  an invisible source. Lens is unlit (MeshBasicMaterial): a downward-facing
+   *  panel this close under its own light would otherwise shade itself dark. */
+  private buildCeilingFixtures() {
+    const lensMat = new THREE.MeshBasicMaterial({ color: 0xf0fff0, fog: false })
+    for (const [x, z] of CEIL_LIGHT_SPOTS) {
+      const housing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 0.55), this.towerMat)
+      housing.position.set(x, H - 0.09, z)
+      this.scene.add(housing)
+      this.colliderMeshes.push(housing)
+
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.32), lensMat)
+      lens.rotation.x = Math.PI / 2
+      lens.position.set(x, H - 0.17, z)
+      this.scene.add(lens)
+
+      const glow = this.addBloom(x, H - 0.45, z, GLOW_BIO, 4.6, 0.85)
+      glow.material.fog = false
     }
   }
 
