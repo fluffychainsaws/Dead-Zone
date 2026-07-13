@@ -4,6 +4,7 @@ import { makeLabelSprite } from './economy'
 import {
   glowSprite,
   dotTexture,
+  forestLineTexture,
   GLOW_RED,
   GLOW_GOLD,
   GLOW_CYAN,
@@ -226,6 +227,41 @@ export class Arena {
     ]
     this.playerColliders.push(...bounds)
     this.zombieColliders.push(...bounds)
+    this.buildForestLine(frameX0, frameX1, frameZ0, 36)
+  }
+
+  /** A treeline just past the invisible world edge — wraps the whole map so
+   *  there's always something out there past the fence/wall instead of flat
+   *  fog to the horizon, and sells the "secluded compound" feel. Flat,
+   *  alpha-cut strips rather than real 3D trees: at these distances, and
+   *  softened by fog, a painted silhouette reads identically to full
+   *  geometry for a fraction of the draw calls. */
+  private buildForestLine(x0: number, x1: number, z0: number, z1: number) {
+    const TREE_H = 16
+    const UNIT_W = 22 // world units per texture repeat
+    const OFF = 2 // pushed past the boundary so it's never inside the invisible wall
+    const baseTex = forestLineTexture()
+
+    const addStrip = (cx: number, cz: number, length: number, rotY: number) => {
+      const tex = baseTex.clone()
+      tex.needsUpdate = true
+      tex.wrapS = THREE.RepeatWrapping
+      tex.repeat.set(Math.max(1, Math.round(length / UNIT_W)), 1)
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(length, TREE_H),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+      )
+      mesh.position.set(cx, TREE_H / 2, cz)
+      mesh.rotation.y = rotY
+      this.scene.add(mesh)
+    }
+
+    const midX = (x0 + x1) / 2
+    const midZ = (z0 + z1) / 2
+    addStrip(midX, z0 - OFF, x1 - x0, 0) // north
+    addStrip(midX, z1 + OFF, x1 - x0, 0) // south
+    addStrip(x0 - OFF, midZ, z1 - z0, Math.PI / 2) // west
+    addStrip(x1 + OFF, midZ, z1 - z0, Math.PI / 2) // east
   }
 
   /** Any zone that swaps the local player into pitch-black vision (flashlight/NVG
