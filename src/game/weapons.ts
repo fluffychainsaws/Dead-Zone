@@ -1104,6 +1104,13 @@ export function buildViewmodel(defId: string): THREE.Group {
     magazine.position.set(0, -0.13, 0.03)
     magazine.rotation.x = 0.12
     g.add(magazine)
+    // magwell — closes the gap between the lower receiver and the top of
+    // the magazine that otherwise exposed a sliver of background between
+    // them; the tilted magazine doesn't sit flush against the receiver's
+    // flat underside without something bridging the two
+    const magWell = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.05, 0.09), dark)
+    magWell.position.set(0, -0.055, 0.03)
+    g.add(magWell)
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.38), dark)
     stock.position.set(0, 0.015, 0.31)
     g.add(stock)
